@@ -297,6 +297,22 @@ function render(){
   wire();
 }
 
+// Загрузка вложения. Grist 1.7.18 не отдаёт виджету токен доступа
+// (эндпоинта /access/token нет), поэтому при хостинге на своём сервисе
+// файл уходит через его /upload, где ключ лежит на стороне сервера.
+// На стороннем хостинге (github.io) прикрепить файл нельзя — сообщаем честно.
+async function uploadInvoice(file){
+  const docId=(await grist.docApi.getDocName?.())||window.__docId||"";
+  const sameHost=location.origin&&!/github\.io$/.test(location.hostname);
+  if(!sameHost)throw new Error("виджет открыт не с сервера AnyQ");
+  const fd=new FormData();
+  fd.append("upload",file,file.name);
+  const res=await fetch(`/upload?doc=${encodeURIComponent(docId)}`,{method:"POST",body:fd});
+  if(!res.ok)throw new Error("сервер ответил "+res.status);
+  const ids=await res.json();
+  return Array.isArray(ids)?ids:[ids];
+}
+
 const grab=()=>{const g=id=>document.getElementById(id);
   return {id:fv.id,date:g("f-date")?.value,dep:g("f-dep")?.value,sup:g("f-sup")?.value,
           amt:g("f-amt")?.value,req:g("f-req")?.value,note:g("f-note")?.value};};
@@ -371,21 +387,25 @@ function wire(){
     if(ready)flds.ready=true;
     const fileInput=document.getElementById("f-file");
     const file=fileInput&&fileInput.files&&fileInput.files[0];
-    try{
-      if(file){
-        uiMsg="Загружаю файл…";
-        const tok=await grist.docApi.getAccessToken({readOnly:false});
-        const fd=new FormData();
-        fd.append("upload",file,file.name);
-        const res=await fetch(`${tok.baseUrl}/attachments?auth=${tok.token}`,{method:"POST",body:fd});
-        if(!res.ok)throw new Error("файл не загрузился: "+res.status);
-        const ids=await res.json();
-        flds.invoice=["L",...(Array.isArray(ids)?ids:[ids])];
+    let fileNote="";
+    // Загрузка файла не должна мешать созданию счёта: если она не удалась,
+    // счёт всё равно сохраняем и честно говорим, что файла нет.
+    if(file){
+      try{
+        const ids=await uploadInvoice(file);
+        if(ids&&ids.length)flds.invoice=["L",...ids];
+      }catch(e){
+        fileNote=" Файл не прикрепился ("+(e.message||e)+"), добавьте его в таблице Bills.";
       }
+    }
+    try{
       await grist.docApi.applyUserActions([ fv.id
         ? ["UpdateRecord","Bills",fv.id,flds]
         : ["AddRecord","Bills",null,flds] ]);
-      modal=null;uiMsg="";await loadAll();render();
+      await loadAll();
+      if(fileNote){uiMsg="Счёт сохранён."+fileNote;}
+      else {modal=null;uiMsg="";}
+      render();
     }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}};
   const s1=document.getElementById("f-save"),s2=document.getElementById("f-saveready");
   if(s1)s1.onclick=()=>save(false);
