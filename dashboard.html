@@ -29,7 +29,10 @@
     border:1px solid var(--line); border-radius:5px; padding:5px 8px; max-width:100%}
   :focus-visible{outline:2px solid var(--accent); outline-offset:1px}
 
-  .toolbar{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:10px}
+  .toolbar{display:flex; gap:8px; align-items:flex-start; margin-bottom:10px}
+  .tb-filters{display:flex; flex-wrap:wrap; gap:6px; align-items:center; flex:1 1 auto; min-width:0}
+  .tb-actions{display:flex; gap:6px; align-items:center; flex:0 0 auto}
+  @media (max-width:700px){ .toolbar{flex-wrap:wrap} }
   .pills{display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--card)}
   .pill{border:0; border-right:1px solid var(--line); background:transparent; color:var(--ink); padding:6px 11px}
   .pill:last-child{border-right:0}
@@ -81,14 +84,14 @@
   .row .val{font-size:12px}
   .row.zero .name,.row.zero .val{color:var(--down); font-weight:600}
 
-  .chart{display:flex; align-items:flex-end; gap:3px; height:120px; padding-top:14px; overflow-x:auto}
-  .cb{flex:1 0 14px; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:14px; position:relative}
+  .chart{display:flex; align-items:flex-end; gap:2px; height:120px; padding-top:14px}
+  .cb{flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; position:relative}
   .cb{max-width:52px}
   .cb i{display:block; width:100%; background:var(--line); border-radius:2px 2px 0 0}
   .cb.insel i{background:var(--accent)}
   .cb.today i{background:var(--kaspi)}
   .cb.insel .lbl{color:var(--ink); font-weight:600}
-  .cb .lbl{font-size:10px; color:var(--muted); white-space:nowrap}
+  .cb .lbl{font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden}
   .cb:hover::after{content:attr(data-tip); position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
     background:var(--ink); color:var(--card); font-size:11px; padding:2px 7px; border-radius:4px; white-space:nowrap; z-index:5}
 
@@ -105,8 +108,8 @@
   .chip.alert{border-color:var(--down); background:var(--down-bg); color:var(--down); font-weight:600}
   .pills.tabs .pill.on{background:var(--ink); color:var(--card)}
   .li.exp{cursor:pointer} .li.exp:hover{background:var(--hover)}
-  .list{display:flex; flex-direction:column; max-height:280px; overflow:auto}
-  .list.tall{max-height:420px}
+  .list{display:flex; flex-direction:column}
+  
   /* массовая инкассация */
   .bulk{max-height:50vh; overflow:auto; margin-top:6px}
   .brow{display:grid; grid-template-columns:1fr 92px 104px 84px; gap:8px; align-items:center; padding:4px 0; border-top:1px solid var(--line)}
@@ -137,7 +140,7 @@
   details.nh summary::-webkit-details-marker{display:none}
   details.nh summary::before{content:"▸ "}
   details.nh[open] summary::before{content:"▾ "}
-  .nhlist{margin-top:6px; max-height:260px; overflow:auto}
+  .nhlist{margin-top:6px}
   .nhday{font-size:11px; color:var(--muted); font-weight:600; padding:7px 0 2px; position:sticky; top:0; background:var(--card)}
   .nhrow{display:flex; gap:9px; align-items:center; padding:3px 0}
   .nhrow .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -572,15 +575,18 @@ function render(){
 
   app.innerHTML=`
     <div class="toolbar">
-      <div class="pills tabs">
-        <button class="pill${tab==="money"?" on":""}" data-tab="money">Касса</button>
-        <button class="pill${tab==="an"?" on":""}" data-tab="an">Аналитика</button>
+      <div class="tb-filters">
+        <div class="pills tabs">
+          <button class="pill${tab==="money"?" on":""}" data-tab="money">Касса</button>
+          <button class="pill${tab==="an"?" on":""}" data-tab="an">Аналитика</button>
+        </div>
+        <div class="pills">${pills}</div>${custom}
+        <details class="dd" id="depdd"${openDD?" open":""}><summary>${esc(depLabel)}</summary>${menu}</details>
       </div>
-      <div class="pills">${pills}</div>${custom}
-      <details class="dd" id="depdd"${openDD?" open":""}><summary>${esc(depLabel)}</summary>${menu}</details>
-      <span class="spacer"></span>
-      <button class="btn primary" id="btn-exp">+ Расход</button>
-      <button class="btn ghost" id="btn-cash">Инкассация</button>
+      <div class="tb-actions">
+        <button class="btn primary" id="btn-exp">+ Расход</button>
+        <button class="btn ghost" id="btn-cash">Инкассация</button>
+      </div>
     </div>
     ${signals}
     ${kpis}
