@@ -143,8 +143,8 @@ const dstr=v=> v instanceof Date ? dayKey(v) : (typeof v==="number" ? dayKey(new
 async function loadAll(){
   const [d,c,a,e,b]=await Promise.all(
     ["Departments","ExpenseCategories","Accounts","Expenses","PayQueue"].map(t=>grist.docApi.fetchTable(t)));
-  deps={}; depOrder=[];
-  cols(d).forEach(r=>{ deps[r.id]=r; if(r.is_sales) depOrder.push(r.id); });
+  deps={}; depOrder=[]; nameToId={};
+  cols(d).forEach(r=>{ deps[r.id]=r; nameToId[r.name]=r.id; if(r.is_sales) depOrder.push(r.id); });
   cats={}; catOrder=[];
   cols(c).forEach(r=>{ cats[r.id]=r; if(r.active!==false) catOrder.push(r.id); });
   accs={}; accOrder=[];
@@ -173,17 +173,25 @@ function chanSums(rows){
 }
 const depName=id=>deps[id]?.name||("#"+id);
 const shortName=id=>depName(id).replace(/^Aport\d+\s*/,"");
+let nameToId={};
+// Ref-колонка из onRecords может прийти как rowId, как имя (display value)
+// или как ['R', rowId] — приводим всё к rowId
+const depId=v=>{
+  if(typeof v==="number") return v;
+  if(Array.isArray(v)) return +v[v.length-1]||0;
+  return nameToId[String(v)]||0;
+};
 
 function render(){
   const app=document.getElementById("app");
   const [from,to]=range();
-  const inR=r=>{const k=dstr(r.date); return k>=from&&k<=to&&(!branch||r.department===branch);};
+  const inR=r=>{const k=dstr(r.date); return k>=from&&k<=to&&(!branch||depId(r.department)===branch);};
   const rows=recs.filter(inR);
   const cur=chanSums(rows);
   // сравнение: прошлый период той же длины
   const len=(new Date(to)-new Date(from))/864e5+1;
   const pFrom=addDays(from,-len), pTo=addDays(from,-1);
-  const prevRows=recs.filter(r=>{const k=dstr(r.date); return k>=pFrom&&k<=pTo&&(!branch||r.department===branch);});
+  const prevRows=recs.filter(r=>{const k=dstr(r.date); return k>=pFrom&&k<=pTo&&(!branch||depId(r.department)===branch);});
   const prev=chanSums(prevRows);
 
   // тулбар
@@ -205,7 +213,7 @@ function render(){
 
   // точки
   const byDep={};
-  rows.forEach(r=>{byDep[r.department]=(byDep[r.department]||0)+(r.total||0);});
+  rows.forEach(r=>{const id=depId(r.department); byDep[id]=(byDep[id]||0)+(r.total||0);});
   const pts=(branch?[branch]:depOrder).map(id=>({id,name:shortName(id),v:byDep[id]||0})).sort((a,b)=>b.v-a.v);
   const maxV=pts[0]?.v||1;
   const ptRows=pts.map(p=>`<div class="row${p.v===0?" zero":""}">
@@ -215,7 +223,7 @@ function render(){
 
   // график 14 дней (уважает фильтр точки)
   const byDay={};
-  recs.filter(r=>!branch||r.department===branch).forEach(r=>{const k=dstr(r.date); byDay[k]=(byDay[k]||0)+(r.total||0);});
+  recs.filter(r=>!branch||depId(r.department)===branch).forEach(r=>{const k=dstr(r.date); byDay[k]=(byDay[k]||0)+(r.total||0);});
   const dks=Object.keys(byDay).sort().slice(-14);
   const dmax=Math.max(...dks.map(k=>byDay[k]),1);
   const todayK=dayKey(new Date());
