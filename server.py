@@ -15,6 +15,7 @@
     GET  /                  → dashboard.html
     GET  /<файл>.html       → статика рядом со скриптом
     POST /upload?doc=<id>   → multipart «upload», отдаёт [id вложения]
+    GET  /file?doc=&att=    → отдаёт вложение из Grist (счёт на оплату)
     GET  /healthz           → ok
 """
 import json
@@ -68,6 +69,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/healthz":
             return self._send(200, b"ok")
+        if path == "/file":
+            qs = dict(p.split("=", 1) for p in self.path.split("?", 1)[-1].split("&") if "=" in p)
+            return self._proxy_attachment(qs)
         name = "dashboard.html" if path in ("/", "") else path.lstrip("/")
         if "/" in name or ".." in name or not name.endswith((".html", ".js", ".css", ".svg")):
             return self._send(404, b"not found")
@@ -84,6 +88,40 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(body)
+
+    def _proxy_attachment(self, qs):
+        """GET /file?doc=<docId>&att=<id> — отдаёт вложение из Grist.
+
+        Виджету казначея нужен файл счёта, который лежит в ДРУГОМ документе
+        (Закупки), и без ключа браузер его не получит. Ключ подкладывает
+        сервер, наружу уходит только сам файл.
+        """
+        doc = urllib.parse.unquote(qs.get("doc", ""))
+        att = urllib.parse.unquote(qs.get("att", ""))
+        if not doc.replace("-", "").replace("_", "").isalnum() or not att.isdigit():
+            return self._send(400, "нужны doc и att".encode())
+        if ALLOWED_DOC and doc not in ALLOWED_DOC:
+            return self._send(403, "документ не разрешён".encode())
+        req = urllib.request.Request(
+            f"{GRIST_URL}/api/docs/{doc}/attachments/{att}/download",
+            headers={"Authorization": f"Bearer {API_KEY}",
+                     "User-Agent": "Mozilla/5.0 (widgets.anyq)"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                body = r.read()
+                self.send_response(200)
+                self.send_header("Content-Type", r.headers.get("Content-Type", "application/octet-stream"))
+                cd = r.headers.get("Content-Disposition")
+                if cd:
+                    self.send_header("Content-Disposition", cd)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "private, max-age=300")
+                self.end_headers()
+                self.wfile.write(body)
+        except urllib.error.HTTPError as e:
+            self._send(e.code, f"Grist: {e.code}".encode())
+        except Exception as e:
+            self._send(502, f"Grist недоступен: {e}".encode())
 
     def do_POST(self):
         if not self.path.startswith("/upload"):

@@ -126,6 +126,9 @@
   .li .t .sub{color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .li .a{font-weight:600; white-space:nowrap}
   .li.bill .a{color:var(--down)}
+  .filelink{color:var(--accent); text-decoration:none; margin-left:6px}
+  .filelink:hover{text-decoration:underline}
+  .nofile{color:var(--muted); margin-left:6px}
   .payrow{display:flex; gap:5px; align-items:center; flex:none}
   .empty-line{color:var(--muted); padding:12px 2px}
   .badge{font-size:11px; font-weight:600; border-radius:4px; padding:2px 7px; white-space:nowrap}
@@ -559,7 +562,8 @@ function render(){
   const billList=unpaid.map(r=>`<div class="li bill">
     <span class="d num">${r.dk?RU_DD(r.dk):""}</span>
     <span class="t"><b>${esc(r.supplier||"Поставщик")}</b>
-      <div class="sub">${esc(shortName(r.department))}${r.request_no?", заявка "+esc(r.request_no):""}</div></span>
+      <div class="sub">${esc(shortName(r.department))}${r.request_no?", заявка "+esc(r.request_no):""}
+        ${r.invoice_link?`<a href="${esc(r.invoice_link)}" target="_blank" rel="noopener" class="filelink">открыть счёт</a>`:`<span class="nofile">без файла</span>`}</div></span>
     <span class="a num">${fmt(r.amount||0)}</span>
     <span class="payrow">${catSel(r.id,r.category)}${accSel(r.id)}<button class="btn primary" data-pay="${r.id}">Оплачено</button></span></div>`).join("")
     ||`<div class="empty-line">Неоплаченных счетов нет.</div>`;
