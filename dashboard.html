@@ -423,14 +423,17 @@ function render(){
       <td class="num ${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")
     ||`<tr><td colspan="4" class="empty-line" style="text-align:left">Нет движения за период.</td></tr>`;
 
-  const cover=expSum>0?cur.total/expSum*100:null;
+  // доля расходов в выручке: понятная величина. Обратное отношение
+  // (во сколько выручка покрывает расходы) при копеечных расходах
+  // давало абсурд вида «покрытие 26483%».
+  const share=cur.total>0&&expSum>0?expSum/cur.total*100:null;
   const lastExp=expenses.length?expenses[0].dk:"";
   // «чистый доход» честен только когда расходы за период вообще вносили
   const netKnown=exp.length>0;
   const kpis=`<div class="kpis">
     <div class="kpi"><div class="t">Выручка</div><div class="v num">${fmt(cur.total)} ₸</div>${dHtml}</div>
     <div class="kpi"><div class="t">Расходы</div><div class="v num">${fmt(expSum)} ₸</div>
-      <span class="d mut">${exp.length} ${plural(exp.length,"запись","записи","записей")}${cover!==null?`, покрытие ${cover.toFixed(0)}%`:""}</span></div>
+      <span class="d mut">${exp.length} ${plural(exp.length,"запись","записи","записей")}${share!==null?`, ${share<0.1?"<0,1":share.toFixed(1).replace(".",",")}% от выручки`:""}</span></div>
     <div class="kpi"><div class="t">Чистый доход</div>
       <div class="v num ${netKnown?(net>=0?"pos":"neg"):""}"${netKnown?"":' style="color:var(--muted)"'}>${fmt(net)} ₸</div>
       ${netKnown?(net>=0?`<span class="d up">в плюсе</span>`:`<span class="d down">до нуля не хватает ${fmt(-net)} ₸</span>`)
@@ -516,14 +519,18 @@ function render(){
     `</div></details>`:"";
 
   const unpaid=bills.filter(r=>!r.paid&&inSel(r.department)).sort((a,b)=>a.dk.localeCompare(b.dk));
-  const accSel=id=>`<select data-accfor="${id}">${accOrder.filter(a=>accs[a].name!=="Касса точки")
+  const accSel=id=>`<select data-accfor="${id}" title="Счёт списания">${accOrder.filter(a=>accs[a].name!=="Касса точки")
     .map(a=>`<option value="${a}">${esc(accs[a].name)}</option>`).join("")}</select>`;
+  // статья расхода для оплаты счёта: закупочная по умолчанию, казначей может сменить
+  const defCat=catOrder.find(c=>/продукт/i.test(cats[c].name))||catOrder[0];
+  const catSel=(id,cur)=>`<select data-catfor="${id}" title="Статья расхода">${catOrder
+    .map(c=>`<option value="${c}"${(cur||defCat)===c?" selected":""}>${esc(cats[c].name)}</option>`).join("")}</select>`;
   const billList=unpaid.map(r=>`<div class="li bill">
     <span class="d num">${r.dk?RU_DD(r.dk):""}</span>
     <span class="t"><b>${esc(r.supplier||"Поставщик")}</b>
       <div class="sub">${esc(shortName(r.department))}${r.request_no?", заявка "+esc(r.request_no):""}</div></span>
     <span class="a num">${fmt(r.amount||0)}</span>
-    <span class="payrow">${accSel(r.id)}<button class="btn primary" data-pay="${r.id}">Оплачено</button></span></div>`).join("")
+    <span class="payrow">${catSel(r.id,r.category)}${accSel(r.id)}<button class="btn primary" data-pay="${r.id}">Оплачено</button></span></div>`).join("")
     ||`<div class="empty-line">Неоплаченных счетов нет.</div>`;
 
   // лента расходов: поиск, группировка по дням, клик по строке правит
@@ -765,12 +772,13 @@ function wire(){
   document.querySelectorAll("[data-pay]").forEach(b=>b.onclick=async()=>{
     const id=+b.dataset.pay,bill=bills.find(x=>x.id===id);if(!bill)return;
     const acc=+document.querySelector(`[data-accfor="${id}"]`).value;
+    const cat=+(document.querySelector(`[data-catfor="${id}"]`)||{}).value||bill.category||0;
     b.disabled=true;b.textContent="…";
     const t=dayKey(new Date());
     try{
       await grist.docApi.applyUserActions([
-        ["UpdateRecord","PayQueue",id,{paid:true,paid_date:epoch(t),paid_account:acc,expense_created:true}],
-        ["AddRecord","Expenses",null,{date:epoch(t),department:bill.department||0,category:bill.category||0,
+        ["UpdateRecord","PayQueue",id,{paid:true,paid_date:epoch(t),paid_account:acc,category:cat,expense_created:true}],
+        ["AddRecord","Expenses",null,{date:epoch(t),department:bill.department||0,category:cat,
           amount:bill.amount||0,account:acc,period:t.slice(0,7),source:"закуп",
           supplier:bill.supplier||"",note:"Оплата счёта"+(bill.request_no?" по заявке "+bill.request_no:""),
           pay_ref:bill.bill_key||String(id),created_by:"дашборд"}]]);
