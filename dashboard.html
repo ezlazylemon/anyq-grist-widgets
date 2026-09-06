@@ -108,6 +108,17 @@
   .badge.up{background:var(--up-bg); color:var(--up)}
   .badge.down{background:var(--down-bg); color:var(--down)}
   .badge.zero{background:var(--hover); color:var(--muted)}
+  .del{border:0; background:none; color:var(--muted); font-size:16px; line-height:1; padding:0 2px; flex:none}
+  .del:hover{color:var(--down)}
+  .btn.sm{padding:3px 9px; font-size:12px}
+  details.nh{margin-top:8px; border-top:1px solid var(--line); padding-top:8px}
+  details.nh summary{cursor:pointer; color:var(--down); font-weight:600; list-style:none}
+  details.nh summary::-webkit-details-marker{display:none}
+  details.nh summary::before{content:"▸ "}
+  details.nh[open] summary::before{content:"▾ "}
+  .nhlist{margin-top:6px; max-height:220px; overflow:auto}
+  .nhrow{display:flex; gap:9px; align-items:center; padding:3px 0}
+  .nhrow .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
   /* модальные окна */
   .mback{position:fixed; inset:0; background:rgba(15,17,20,.45); z-index:50;
@@ -260,6 +271,7 @@ function modalHtml(){
   const dk=fv.date||addDays(todayK,-1);
   const dep=+(fv.dep||((sel.size===1&&[...sel][0])||depOrder[0]));
   const hint=cashHint(dk,dep,fv.amt);
+  const exist=cashrec.find(r=>r.dk===dk&&r.department===dep);
   return `<div class="mback" data-close><div class="modal">
     <h3>Сдача наличных<button class="x" data-close aria-label="Закрыть">×</button></h3>
     <div class="form">
@@ -267,8 +279,9 @@ function modalHtml(){
       <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${dep===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
       <label class="widef">Сдано фактически, ₸<input type="number" id="f-amt" min="0" step="1" value="${fv.amt||""}" placeholder="0"></label>
       <div class="hint" id="cash-hint">${hint}</div>
-      <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note||"")}" placeholder="необязательно"></label>
-      <div class="widef"><button class="btn primary" id="f-cash">Записать сдачу</button>
+      ${exist?`<div class="hint" id="cash-exist">За этот день сдача уже внесена (${fmt(exist.cash_actual||0)} ₸). Запись будет обновлена.</div>`:``}
+      <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note??(exist?exist.note:"")??"")}" placeholder="необязательно"></label>
+      <div class="widef"><button class="btn primary" id="f-cash">${exist?"Обновить сдачу":"Записать сдачу"}</button>
         <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
     </div></div></div>`;
 }
@@ -365,15 +378,20 @@ function render(){
     return `<div class="li"><span class="d num">${RU_DD(r.dk)}</span>
       <span class="t"><b>${esc(shortName(r.department))}</b>
         <div class="sub">ожидалось ${fmt(r.cash_expected||0)}, сдано ${fmt(r.cash_actual||0)}${r.note?", "+esc(r.note):""}</div></span>
-      ${badge}</div>`;}).join("")
+      ${badge}<button class="del" data-delcr="${r.id}" title="Удалить запись">×</button></div>`;}).join("")
     ||`<div class="empty-line">Сдач за период нет.</div>`;
   // точки с наличной выручкой за вчера без сдачи
   const yk=addDays(todayK,-1);
   const cashYest={};
   recs.forEach(r=>{if(dstr(r.date)===yk){const id=depId(r.department);cashYest[id]=(cashYest[id]||0)+(r.cash||0);}});
   const handed=new Set(cashrec.filter(r=>r.dk===yk).map(r=>r.department));
-  const notHanded=depOrder.filter(id=>(cashYest[id]||0)>0&&!handed.has(id)&&inSel(id));
-  const nhLine=notHanded.length?`<div class="foot" style="color:var(--down)">НЕ СДАНО за вчера: ${notHanded.map(shortName).map(esc).join(", ")}</div>`:"";
+  const notHanded=depOrder.filter(id=>(cashYest[id]||0)>0&&!handed.has(id)&&inSel(id))
+    .sort((a,b)=>(cashYest[b]||0)-(cashYest[a]||0));
+  const nhSum=notHanded.reduce((s,id)=>s+(cashYest[id]||0),0);
+  const nhLine=notHanded.length?`<details class="nh"><summary>Не сдали за ${RU_DD(yk)}: ${notHanded.length} точек на ${fmt(nhSum)} ₸</summary>
+    <div class="nhlist">`+notHanded.map(id=>`<div class="nhrow"><span class="nm">${esc(shortName(id))}</span>
+      <span class="num">${fmt(cashYest[id])}</span>
+      <button class="btn ghost sm" data-hand="${id}">Внести</button></div>`).join("")+`</div></details>`:"";
 
   const unpaid=bills.filter(r=>!r.paid&&inSel(r.department)).sort((a,b)=>a.dk.localeCompare(b.dk));
   const accSel=id=>`<select data-accfor="${id}">${accOrder.filter(a=>accs[a].name!=="Касса точки")
@@ -478,10 +496,15 @@ function wire(){
       const amt=parseFloat(fv.amt);
       if(isNaN(amt)||amt<0){uiMsg="Ошибка: введите сумму";render();return;}
       cashBtn.disabled=true;
+      const dk=fv.date,dep=+fv.dep;
+      // одна сдача на точку и день: если запись есть, обновляем её
+      const ex=cashrec.find(r=>r.dk===dk&&r.department===dep);
+      const flds={date:epoch(dk),department:dep,cash_actual:amt,
+        note:(fv.note||"").trim(),submitted_by:"дашборд"};
       try{
-        await grist.docApi.applyUserActions([["AddRecord","CashReconciliation",null,{
-          date:epoch(fv.date),department:+fv.dep,cash_actual:amt,
-          note:(fv.note||"").trim(),submitted_by:"дашборд"}]]);
+        await grist.docApi.applyUserActions([ ex
+          ? ["UpdateRecord","CashReconciliation",ex.id,flds]
+          : ["AddRecord","CashReconciliation",null,flds] ]);
         modal=null;uiMsg="";await loadAll();render();
       }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}
     };
@@ -503,6 +526,20 @@ function wire(){
       }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}
     };
   }
+  document.querySelectorAll("[data-delcr]").forEach(b=>b.onclick=async()=>{
+    const id=+b.dataset.delcr;
+    const r=cashrec.find(x=>x.id===id);
+    if(!confirm(`Удалить сдачу ${RU_DD(r?.dk||"")} по точке ${depName(r?.department)}?`))return;
+    b.disabled=true;
+    try{ await grist.docApi.applyUserActions([["RemoveRecord","CashReconciliation",id]]);
+      await loadAll();render();
+    }catch(e){b.disabled=false;alert("Ошибка: "+(e.message||e));}
+  });
+  document.querySelectorAll("[data-hand]").forEach(b=>b.onclick=()=>{
+    modal="cash";uiMsg="";
+    fv={date:addDays(dayKey(new Date()),-1),dep:b.dataset.hand};
+    render();
+  });
   document.querySelectorAll("[data-pay]").forEach(b=>b.onclick=async()=>{
     const id=+b.dataset.pay,bill=bills.find(x=>x.id===id);if(!bill)return;
     const acc=+document.querySelector(`[data-accfor="${id}"]`).value;
