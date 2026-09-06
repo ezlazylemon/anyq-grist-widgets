@@ -666,6 +666,28 @@ function render(){
         <div class="list tall" id="explist">${expList}</div></div>`;
   const cardChart=`<div class="card" id="c-chart"><h2>Динамика по дням <span class="sub">₸, красный столбец: сегодня</span></h2>
         <div class="chart">${chart}</div></div>`;
+  // прибыль по точкам: выручка минус расходы, отнесённые на точку
+  const byDepExp={};
+  exp.forEach(r=>{byDepExp[r.department]=(byDepExp[r.department]||0)+(r.amount||0);});
+  const profitRows=depOrder.filter(inSel)
+    .map(id=>({id,rev:byDep[id]||0,ex:byDepExp[id]||0}))
+    .filter(p=>p.rev||p.ex)
+    .map(p=>({...p,net:p.rev-p.ex}))
+    .sort((a,b)=>b.net-a.net);
+  const profitTable=profitRows.length?`<table>
+      <tr><th>Точка</th><th>Выручка</th><th>Расходы</th><th>Чистый доход</th></tr>
+      ${profitRows.map(p=>`<tr><td>${esc(shortName(p.id))}</td>
+        <td class="num">${fmt(p.rev)}</td>
+        <td class="num">${p.ex?"−"+fmt(p.ex):"0"}</td>
+        <td class="num ${p.net>=0?"pos":"neg"}">${fmt(p.net)}</td></tr>`).join("")}
+      <tr><td><b>Итого</b></td><td class="num"><b>${fmt(profitRows.reduce((s,p)=>s+p.rev,0))}</b></td>
+        <td class="num"><b>${fmt(profitRows.reduce((s,p)=>s+p.ex,0))?"−"+fmt(profitRows.reduce((s,p)=>s+p.ex,0)):"0"}</b></td>
+        <td class="num"><b>${fmt(profitRows.reduce((s,p)=>s+p.net,0))}</b></td></tr>
+    </table>`:`<div class="empty-line">Нет данных за период.</div>`;
+  const cardProfit=`<div class="card wide" id="c-profit"><h2>Прибыль по точкам
+        <span class="sub">${netKnown?"выручка минус внесённые расходы":"расходы за период не вносили"}</span></h2>
+        ${profitTable}</div>`;
+
   const cardCF=`<div class="card"><h2>Движение по счетам <span class="sub">оборот за период, не остаток</span></h2>
         <table><tr><th>Счёт</th><th>Приход</th><th>Расход</th><th>Оборот</th></tr>${cfRows}</table></div>`;
   const cardDonutRev=`<div class="card"><h2>Выручка по каналам <span class="cnt">${from===to?RU_D(from):RU_DD(from)+"-"+RU_DD(to)}</span></h2>
@@ -675,7 +697,7 @@ function render(){
 
   const body=tab==="money"
     ? `<div class="grid">${cardPoints}${cardCash}${cardBills}${cardExp}</div>`
-    : `<div class="grid">${cardChart}${cardCF}${cardDonutRev}${cardDonutExp}</div>`;
+    : `<div class="grid">${cardChart}${cardCF}${cardProfit}${cardDonutRev}${cardDonutExp}</div>`;
 
   app.innerHTML=`
     <div class="toolbar">

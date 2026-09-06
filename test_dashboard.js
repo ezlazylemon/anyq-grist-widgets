@@ -610,6 +610,20 @@ async function main() {
   check("повторный клик вернул все точки", G("sel").size > 1);
   markupSane(document.getElementById("app").innerHTML, "клик по точке");
 
+  // ---- 17. прибыль по точкам на вкладке аналитики ----
+  resetBackend();
+  store.Expenses = { id: [31], date: [T0], department: [1], category: [1], amount: [500],
+    account: [1], period: ["2026-09"], source: ["казначей"], supplier: [""], note: [""],
+    created_by: ["t"], pay_ref: [""] };
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 3000, total: 3000 }),
+                   mkRevRow(2, T0, 2, { cash: 1000, total: 1000 })]);
+  S("tab", "an");
+  h = await render();
+  check("аналитика: есть таблица прибыли по точкам", h.includes("Прибыль по точкам"));
+  check("прибыль по точкам: есть итоговая строка", h.includes("Итого"));
+  markupSane(h, "прибыль по точкам");
+  S("tab", "money");
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");
