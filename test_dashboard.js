@@ -728,6 +728,17 @@ async function main() {
   check("свежий счёт без метки возраста", (h.match(/agetag/g) || []).length === 1);
   markupSane(h, "возраст счетов");
 
+  // ---- 24. состав закупки виден казначею ----
+  resetBackend();
+  store.PayQueue = { id: [81], bill_key: ["B81"], date_added: [T0], department: [1],
+    supplier: ["ТОО Мука"], amount: [5000], invoice_link: [""], request_no: ["PR-9"],
+    category: [1], paid: [false], paid_date: [null], paid_account: [0],
+    expense_created: [false], requisites: [""], items_summary: ["Мука x50, Масло x20"] };
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000 })]);
+  h = await render();
+  check("состав закупки показан", h.includes("Мука x50") && h.includes("Масло x20"));
+  markupSane(h, "состав закупки");
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");

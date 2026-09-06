@@ -147,6 +147,7 @@
   .li .t .sub{color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .li .a{font-weight:600; white-space:nowrap}
   .li.bill .a{color:var(--down)}
+  .items{font-size:11px; color:var(--ink)}
   .req{font-size:11px}
   .req.none{color:var(--warn,#8A6A2B)}
   .agetag{font-size:11px; color:var(--muted); border:1px solid var(--line);
@@ -644,6 +645,7 @@ function render(){
     <span class="t"><b>${esc(r.supplier||"Поставщик")}</b>${ageTag}
       <div class="sub">${esc(shortName(r.department))}${r.request_no?", заявка "+esc(r.request_no):""}
         ${r.invoice_link?`<a href="${esc(r.invoice_link)}" target="_blank" rel="noopener" class="filelink">открыть счёт</a>`:`<span class="nofile">без файла</span>`}</div>
+      ${r.items_summary?`<div class="sub items">${esc(r.items_summary)}</div>`:""}
       ${r.requisites?`<div class="sub req">${esc(r.requisites)}</div>`
         :`<div class="sub req none">реквизиты поставщика не заполнены</div>`}</span>
     <span class="a num">${fmt(r.amount||0)}</span>
