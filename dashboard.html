@@ -116,7 +116,8 @@
   details.nh summary::-webkit-details-marker{display:none}
   details.nh summary::before{content:"▸ "}
   details.nh[open] summary::before{content:"▾ "}
-  .nhlist{margin-top:6px; max-height:220px; overflow:auto}
+  .nhlist{margin-top:6px; max-height:260px; overflow:auto}
+  .nhday{font-size:11px; color:var(--muted); font-weight:600; padding:7px 0 2px; position:sticky; top:0; background:var(--card)}
   .nhrow{display:flex; gap:9px; align-items:center; padding:3px 0}
   .nhrow .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
@@ -380,18 +381,31 @@ function render(){
         <div class="sub">ожидалось ${fmt(r.cash_expected||0)}, сдано ${fmt(r.cash_actual||0)}${r.note?", "+esc(r.note):""}</div></span>
       ${badge}<button class="del" data-delcr="${r.id}" title="Удалить запись">×</button></div>`;}).join("")
     ||`<div class="empty-line">Сдач за период нет.</div>`;
-  // точки с наличной выручкой за вчера без сдачи
-  const yk=addDays(todayK,-1);
-  const cashYest={};
-  recs.forEach(r=>{if(dstr(r.date)===yk){const id=depId(r.department);cashYest[id]=(cashYest[id]||0)+(r.cash||0);}});
-  const handed=new Set(cashrec.filter(r=>r.dk===yk).map(r=>r.department));
-  const notHanded=depOrder.filter(id=>(cashYest[id]||0)>0&&!handed.has(id)&&inSel(id))
-    .sort((a,b)=>(cashYest[b]||0)-(cashYest[a]||0));
-  const nhSum=notHanded.reduce((s,id)=>s+(cashYest[id]||0),0);
-  const nhLine=notHanded.length?`<details class="nh"><summary>Не сдали за ${RU_DD(yk)}: ${notHanded.length} точек на ${fmt(nhSum)} ₸</summary>
-    <div class="nhlist">`+notHanded.map(id=>`<div class="nhrow"><span class="nm">${esc(shortName(id))}</span>
-      <span class="num">${fmt(cashYest[id])}</span>
-      <button class="btn ghost sm" data-hand="${id}">Внести</button></div>`).join("")+`</div></details>`:"";
+  // несданная касса за ВСЕ закрытые дни (сегодня не считаем, день идёт)
+  const cashByDay={};   // day -> {depId: cash}
+  recs.forEach(r=>{
+    const k=dstr(r.date); if(k>=todayK)return;
+    const id=depId(r.department); const c=r.cash||0; if(c<=0)return;
+    (cashByDay[k]||={})[id]=(cashByDay[k][id]||0)+c;});
+  const handedSet=new Set(cashrec.map(r=>r.dk+"|"+r.department));
+  const debtDays=[];
+  let debtSum=0,debtCount=0;
+  Object.keys(cashByDay).sort().reverse().forEach(k=>{
+    const list=Object.entries(cashByDay[k])
+      .filter(([id])=>!handedSet.has(k+"|"+id)&&inSel(+id))
+      .map(([id,v])=>({id:+id,v})).sort((a,b)=>b.v-a.v);
+    if(!list.length)return;
+    const s=list.reduce((a,x)=>a+x.v,0);
+    debtSum+=s; debtCount+=list.length;
+    debtDays.push({k,list,s});});
+  const shown=debtDays.slice(0,10);
+  const nhLine=debtDays.length?`<details class="nh"><summary>Не сдана касса: ${debtCount} точко-дней на ${fmt(debtSum)} ₸</summary>
+    <div class="nhlist">`+shown.map(d=>`<div class="nhday">${RU_D(d.k)} · ${d.list.length} точек · ${fmt(d.s)} ₸</div>`+
+      d.list.map(x=>`<div class="nhrow"><span class="nm">${esc(shortName(x.id))}</span>
+        <span class="num">${fmt(x.v)}</span>
+        <button class="btn ghost sm" data-hand="${x.id}" data-day="${d.k}">Внести</button></div>`).join("")).join("")+
+      (debtDays.length>shown.length?`<div class="nhday">и ещё ${debtDays.length-shown.length} дней</div>`:``)+
+    `</div></details>`:"";
 
   const unpaid=bills.filter(r=>!r.paid&&inSel(r.department)).sort((a,b)=>a.dk.localeCompare(b.dk));
   const accSel=id=>`<select data-accfor="${id}">${accOrder.filter(a=>accs[a].name!=="Касса точки")
@@ -537,7 +551,7 @@ function wire(){
   });
   document.querySelectorAll("[data-hand]").forEach(b=>b.onclick=()=>{
     modal="cash";uiMsg="";
-    fv={date:addDays(dayKey(new Date()),-1),dep:b.dataset.hand};
+    fv={date:b.dataset.day||addDays(dayKey(new Date()),-1),dep:b.dataset.hand};
     render();
   });
   document.querySelectorAll("[data-pay]").forEach(b=>b.onclick=async()=>{
