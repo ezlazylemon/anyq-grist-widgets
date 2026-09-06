@@ -217,6 +217,18 @@ function legend(parts){
     <span class="pp num">${(p.v/tot*100).toFixed(0)}%</span></div>`).join("")+`</div>`;
 }
 
+function cashHint(dk,dep,amt){
+  const expd=expectedCash(dk,dep);
+  const act=parseFloat(amt);
+  let h=`Ожидается за ${RU_DD(dk)}: <b class="num">${fmt(expd)} ₸</b>`;
+  if(!isNaN(act)){
+    const d=Math.round((act-expd)*100)/100;
+    h+= d===0?`. <b class="pos">Сойдётся ровно</b>`
+      : d>0?`. Излишек: <b class="pos">+${fmt(d)} ₸</b>`
+           :`. Недосдача: <b class="neg">−${fmt(-d)} ₸</b>`;
+  }
+  return h;
+}
 // ожидаемая сдача, посчитанная на клиенте для подсказки в форме
 function expectedCash(dk,dep){
   let cash=0;
@@ -247,22 +259,14 @@ function modalHtml(){
   // сдача наличных
   const dk=fv.date||addDays(todayK,-1);
   const dep=+(fv.dep||((sel.size===1&&[...sel][0])||depOrder[0]));
-  const expd=expectedCash(dk,dep);
-  const act=parseFloat(fv.amt);
-  let hint=`Ожидается за ${RU_DD(dk)}: <b class="num">${fmt(expd)} ₸</b>`;
-  if(!isNaN(act)){
-    const d=Math.round((act-expd)*100)/100;
-    hint+= d===0?`. <b class="pos">Сойдётся ровно</b>`
-      : d>0?`. Излишек: <b class="pos">+${fmt(d)} ₸</b>`
-           :`. Недосдача: <b class="neg">−${fmt(-d)} ₸</b>`;
-  }
+  const hint=cashHint(dk,dep,fv.amt);
   return `<div class="mback" data-close><div class="modal">
     <h3>Сдача наличных<button class="x" data-close aria-label="Закрыть">×</button></h3>
     <div class="form">
       <label>За какой день<input type="date" id="f-date" value="${dk}"></label>
       <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${dep===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
       <label class="widef">Сдано фактически, ₸<input type="number" id="f-amt" min="0" step="1" value="${fv.amt||""}" placeholder="0"></label>
-      <div class="hint">${hint}</div>
+      <div class="hint" id="cash-hint">${hint}</div>
       <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note||"")}" placeholder="необязательно"></label>
       <div class="widef"><button class="btn primary" id="f-cash">Записать сдачу</button>
         <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
@@ -460,11 +464,13 @@ function wire(){
   document.querySelectorAll("[data-close]").forEach(el=>el.addEventListener("click",e=>{
     if(e.target===el){modal=null;uiMsg="";render();}}));
   if(modal==="cash"){
+    // ввод обновляет только строку подсказки, без перерисовки страницы
+    const upd=()=>{fv=grabForm();
+      const h=document.getElementById("cash-hint");
+      if(h)h.innerHTML=cashHint(fv.date||addDays(dayKey(new Date()),-1),+fv.dep,fv.amt);};
     ["f-date","f-dep","f-amt"].forEach(id=>{
       const el=document.getElementById(id);
-      if(el)el.addEventListener("input",()=>{fv=grabForm();render();
-        const a=document.getElementById("f-amt");if(a){a.focus();
-          const L=a.value.length;a.setSelectionRange&&a.setSelectionRange(L,L);}});});
+      if(el)el.addEventListener("input",upd);});
     const cashBtn=document.getElementById("f-cash");
     if(cashBtn)cashBtn.onclick=async()=>{
       fv=grabForm();
