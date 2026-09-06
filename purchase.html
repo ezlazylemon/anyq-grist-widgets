@@ -7,12 +7,16 @@
 <style>
   :root{
     --bg:#F1F2F4; --card:#FFFFFF; --ink:#1F2328; --muted:#68707A; --line:#D9DDE2;
-    --accent:#2563B8; --up:#188A50; --down:#C6402E; --warn:#B45309;
-    --input:#FFFFFF; --hover:#F4F6F8; --up-bg:#E5F4EC; --down-bg:#FBEAE7; --warn-bg:#FDF3E3;
+    --accent:#2563B8; --up:#188A50; --down:#C6402E; --warn:#8A6A2B;
+    --input:#FFFFFF; --hover:#F4F6F8; --seg-bg:#E7E9EC;
+    /* смысловые цвета — только текстом на нейтральной подложке, без заливок */
+    --up-bg:#F1F4F2; --down-bg:#F6F1F0; --warn-bg:#F5F2EC;
   }
   @media (prefers-color-scheme: dark){
     :root{ --bg:#17191C; --card:#1F2226; --ink:#E8EAEC; --muted:#8C939B; --line:#33383E;
-           --input:#191C1F; --hover:#262A2F; --up-bg:#173226; --down-bg:#3A211D; --warn-bg:#33270F; }
+           --input:#191C1F; --hover:#262A2F; --seg-bg:#2A2E33;
+           --up:#5BB07E; --down:#D98A7C; --warn:#C4A46A;
+           --up-bg:#22262A; --down-bg:#2A2426; --warn-bg:#2A2723; }
   }
   *{box-sizing:border-box; margin:0}
   body{background:var(--bg); color:var(--ink);
@@ -25,23 +29,28 @@
   .card{background:var(--card); border:1px solid var(--line); border-radius:6px; padding:12px 14px}
   button{font:inherit; cursor:pointer}
   select,input{font:inherit; color:var(--ink); background:var(--input);
-    border:1px solid var(--line); border-radius:5px; padding:5px 8px; max-width:100%}
+    border:1px solid var(--line); border-radius:6px; padding:5px 8px; max-width:100%}
+  select:hover,input:hover{border-color:var(--muted)}
   :focus-visible{outline:2px solid var(--accent); outline-offset:1px}
   .toolbar{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:10px}
-  .pills{display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--card)}
-  .pill{border:0; border-right:1px solid var(--line); background:transparent; color:var(--ink); padding:6px 11px}
-  .pill:last-child{border-right:0}
-  .pill.on{background:var(--ink); color:var(--card)}
+  .pills{display:flex; gap:2px; border-radius:6px; background:var(--seg-bg); padding:2px}
+  .pill{border:0; background:transparent; color:var(--muted); padding:5px 12px; border-radius:5px}
+  .pill:hover{color:var(--ink)}
+  .pill.on{background:var(--card); color:var(--ink); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.08)}
   .btn{border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:6px; padding:6px 11px}
+  .btn:hover{background:var(--hover)}
+  .btn.primary:hover{filter:brightness(1.07)}
   .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600}
   .btn.ghost{color:var(--accent); border-color:var(--accent)}
   .btn.sm{padding:3px 9px; font-size:12px}
   .btn:disabled{opacity:.5; cursor:default}
   .spacer{flex:1}
   .signals{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
-  .chip{border:1px solid var(--line); background:var(--card); color:var(--muted);
-    border-radius:20px; padding:5px 12px; font-size:12px}
-  .chip.alert{border-color:var(--warn); background:var(--warn-bg); color:var(--warn); font-weight:600}
+  .chip{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line);
+    background:var(--card); color:var(--muted); border-radius:20px; padding:5px 12px; font-size:12px}
+  .chip::before{content:""; width:6px; height:6px; border-radius:50%; background:var(--line)}
+  .chip.alert{color:var(--ink)}
+  .chip.alert::before{background:var(--warn)}
   .grid{display:grid; gap:10px; grid-template-columns:1fr 1fr}
   @media (max-width:900px){.grid{grid-template-columns:1fr}}
   .grid .wide{grid-column:1/-1}
@@ -54,11 +63,12 @@
   .li .a{font-weight:600; white-space:nowrap}
   .li .acts{display:flex; gap:5px; flex:none}
   .empty-line{color:var(--muted); padding:12px 2px}
-  .badge{font-size:11px; font-weight:600; border-radius:4px; padding:2px 7px; white-space:nowrap}
-  .badge.wait{background:var(--warn-bg); color:var(--warn)}
-  .badge.ok{background:var(--up-bg); color:var(--up)}
-  .badge.draft{background:var(--hover); color:var(--muted)}
-  .badge.late{background:var(--down-bg); color:var(--down)}
+  .badge{font-size:11px; font-weight:600; border-radius:4px; padding:2px 7px; white-space:nowrap;
+    background:var(--hover)}
+  .badge.wait{color:var(--warn)}
+  .badge.ok{color:var(--up)}
+  .badge.draft{color:var(--muted)}
+  .badge.late{color:var(--down)}
   .del{border:0; background:none; color:var(--muted); font-size:16px; line-height:1; padding:0 2px}
   .del:hover{color:var(--down)}
   .mback{position:fixed; inset:0; background:rgba(15,17,20,.45); z-index:50;
