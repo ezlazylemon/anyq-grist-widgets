@@ -10,65 +10,103 @@
 <style>
   :root{
     --bg:#F4F4F2; --card:#FFFFFF; --ink:#191C1F; --muted:#6B7178; --line:#E3E3DE;
+    --chip:#ECECE8; --chip-on:#191C1F; --chip-on-ink:#FFFFFF;
     --cash:#B98A2F; --kaspi:#F14635; --halyk:#1DA860; --bck:#2563B8;
     --deliv:#8B5CF6; --other:#9AA0A6; --up:#1DA860; --down:#D24A35;
+    --btn:#191C1F; --btn-ink:#fff; --input:#FAFAF8;
   }
   @media (prefers-color-scheme: dark){
-    :root{ --bg:#15171A; --card:#1E2126; --ink:#ECEDEE; --muted:#8B9198; --line:#2C3036; }
+    :root{ --bg:#15171A; --card:#1E2126; --ink:#ECEDEE; --muted:#8B9198; --line:#2C3036;
+           --chip:#272B31; --chip-on:#ECEDEE; --chip-on-ink:#15171A;
+           --btn:#ECEDEE; --btn-ink:#15171A; --input:#181B1F; }
   }
   *{box-sizing:border-box; margin:0}
-  html,body{height:100%}
-  body{
-    background:var(--bg); color:var(--ink);
-    font-family:"IBM Plex Sans",system-ui,sans-serif;
-    font-size:14px; line-height:1.45; padding:20px 22px 28px;
-  }
+  body{ background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif; font-size:14px; line-height:1.45;
+    padding:16px 18px 26px; }
   .mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
   .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:600}
-  /* ── чек дня ── */
+  /* панель фильтров */
+  .toolbar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px}
+  .pills{display:flex; gap:4px; background:var(--chip); border-radius:8px; padding:3px}
+  .pill{border:0; background:transparent; color:var(--ink); font:inherit; font-weight:500;
+        padding:5px 12px; border-radius:6px; cursor:pointer}
+  .pill.on{background:var(--chip-on); color:var(--chip-on-ink); font-weight:600}
+  select,input[type=date],input[type=number],input[type=text]{
+    font:inherit; color:var(--ink); background:var(--input);
+    border:1px solid var(--line); border-radius:8px; padding:6px 10px; max-width:100%}
+  select:focus,input:focus,.pill:focus-visible,button:focus-visible{outline:2px solid var(--bck); outline-offset:1px}
+  .spacer{flex:1}
+  .refresh{border:1px solid var(--line); background:var(--card); border-radius:8px;
+        padding:6px 10px; cursor:pointer; font:inherit; color:var(--muted)}
+  /* чек */
   .tape{background:var(--card); border:1px solid var(--line); border-radius:10px;
-        padding:18px 20px 16px; position:relative; overflow:hidden}
+        padding:16px 18px 14px; position:relative; overflow:hidden}
   .tape::before{content:""; position:absolute; top:0; left:0; right:0; height:3px;
         background:linear-gradient(90deg,var(--cash),var(--kaspi),var(--halyk),var(--bck),var(--deliv))}
-  .total{font-size:clamp(30px,6vw,44px); font-weight:600; margin:6px 0 2px}
+  .total{font-size:clamp(28px,5vw,40px); font-weight:600; margin:4px 0 0}
   .total small{font-size:.55em; color:var(--muted); font-weight:500}
-  .delta{font-weight:600}
-  .delta.up{color:var(--up)} .delta.down{color:var(--down)}
-  .vs{color:var(--muted); margin-top:2px}
-  .bar{display:flex; height:14px; border-radius:7px; overflow:hidden; margin:14px 0 10px; background:var(--line)}
+  .delta{font-weight:600} .delta.up{color:var(--up)} .delta.down{color:var(--down)}
+  .vs{color:var(--muted)}
+  .bar{display:flex; height:13px; border-radius:7px; overflow:hidden; margin:12px 0 9px; background:var(--line)}
   .bar div{height:100%}
-  .legend{display:flex; flex-wrap:wrap; gap:6px 16px}
+  .legend{display:flex; flex-wrap:wrap; gap:5px 15px}
   .legend .item{display:flex; align-items:center; gap:6px; white-space:nowrap}
   .dot{width:8px; height:8px; border-radius:2px; flex:none}
-  .item b{font-weight:600}
-  .item .pct{color:var(--muted)}
-  /* ── сетки ── */
-  .grid{display:grid; gap:14px; margin-top:14px; grid-template-columns:1fr 1fr}
-  @media (max-width:760px){ .grid{grid-template-columns:1fr} }
-  .card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px}
-  .card h2{font-size:13px; font-weight:600; margin-bottom:10px}
+  .item b{font-weight:600} .item .pct{color:var(--muted)}
+  /* сетка карточек */
+  .grid{display:grid; gap:12px; margin-top:12px; grid-template-columns:1fr 1fr}
+  @media (max-width:860px){ .grid{grid-template-columns:1fr} }
+  .card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:13px 15px}
+  .card h2{font-size:13px; font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:8px}
   .card h2 span{color:var(--muted); font-weight:500}
-  /* топ точек */
-  .rows{display:flex; flex-direction:column; gap:7px}
-  .row{display:grid; grid-template-columns:minmax(90px,38%) 1fr auto; gap:10px; align-items:center}
+  .card h2 .cnt{margin-left:auto; color:var(--muted); font-weight:500; font-size:12px}
+  /* точки */
+  .rows{display:flex; flex-direction:column; gap:6px; max-height:340px; overflow:auto}
+  .row{display:grid; grid-template-columns:minmax(86px,36%) 1fr auto; gap:10px; align-items:center}
   .row .name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .row .track{height:8px; border-radius:4px; background:var(--line); overflow:hidden}
   .row .track div{height:100%; border-radius:4px; background:var(--kaspi); opacity:.85}
   .row .val{font-size:12px}
   .row.zero .name,.row.zero .val{color:var(--down); font-weight:600}
-  /* 14 дней */
-  .days{display:flex; align-items:flex-end; gap:5px; height:110px; margin-top:6px}
-  .day{flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; min-width:0}
-  .day .col{width:100%; border-radius:3px 3px 0 0; background:var(--bck); opacity:.8; transition:opacity .15s}
+  /* график */
+  .days{display:flex; align-items:flex-end; gap:4px; height:104px; margin-top:4px}
+  .day{flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0}
+  .day .col{width:100%; border-radius:3px 3px 0 0; background:var(--bck); opacity:.8}
   .day.today .col{background:var(--kaspi); opacity:1}
   .day:hover .col{opacity:1}
   .day .lbl{font-size:10px; color:var(--muted)}
-  .day .sum{font-size:10px; color:var(--muted); visibility:hidden}
-  .day:hover .sum,.day.today .sum{visibility:visible}
-  .foot{margin-top:14px; color:var(--muted); font-size:12px}
+  /* списки расходов и счетов */
+  .list{display:flex; flex-direction:column; max-height:300px; overflow:auto}
+  .li{display:flex; gap:10px; align-items:baseline; padding:7px 2px; border-top:1px solid var(--line)}
+  .li:first-child{border-top:0}
+  .li .d{color:var(--muted); font-size:12px; flex:none; width:46px}
+  .li .t{flex:1; min-width:0}
+  .li .t .cat{font-weight:600}
+  .li .t .sub{color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .li .a{font-weight:600; white-space:nowrap}
+  .li.bill .a{color:var(--down)}
+  .payrow{display:flex; gap:6px; align-items:center; flex:none}
+  button.act{border:0; background:var(--btn); color:var(--btn-ink); font:inherit; font-weight:600;
+        border-radius:8px; padding:6px 12px; cursor:pointer}
+  button.act.small{padding:4px 10px; font-size:12px}
+  button.act:disabled{opacity:.5; cursor:default}
+  .empty-line{color:var(--muted); padding:14px 2px}
+  /* форма расхода */
+  details.addform{margin-top:10px; border-top:1px dashed var(--line); padding-top:10px}
+  details.addform summary{cursor:pointer; font-weight:600; list-style:none; display:flex; align-items:center; gap:6px}
+  details.addform summary::before{content:"+"; font-weight:700; font-size:16px; line-height:1}
+  details[open].addform summary::before{content:"–"}
+  .form{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px}
+  .form .wide{grid-column:1/-1}
+  .form label{display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted)}
+  .form label>*{width:100%}
+  .msg{font-size:12px; margin-top:6px}
+  .msg.ok{color:var(--up)} .msg.err{color:var(--down)}
+  .foot{margin-top:12px; color:var(--muted); font-size:12px}
   .empty{padding:40px 20px; text-align:center; color:var(--muted)}
   @media (prefers-reduced-motion:no-preference){
-    .bar div,.row .track div{transition:width .5s ease}
+    .bar div,.row .track div{transition:width .45s ease}
   }
 </style>
 </head>
@@ -76,113 +114,228 @@
 <div id="app"><div class="empty">Подключение к данным…</div></div>
 <script src="https://work.anyq.chat/grist-plugin-api.js"></script>
 <script>
+"use strict";
 const CH = [
-  {k:"cash",      n:"Наличные", c:"var(--cash)"},
-  {k:"kaspi",     n:"Kaspi",    c:"var(--kaspi)"},
-  {k:"halyk",     n:"Halyk",    c:"var(--halyk)"},
-  {k:"bck",       n:"БЦК",      c:"var(--bck)"},
-  {k:"deliv",     n:"Доставка", c:"var(--deliv)"},
-  {k:"other",     n:"Прочее",   c:"var(--other)"},
+  {k:"cash", n:"Наличные", c:"var(--cash)"}, {k:"kaspi", n:"Kaspi", c:"var(--kaspi)"},
+  {k:"halyk", n:"Halyk", c:"var(--halyk)"}, {k:"bck", n:"БЦК", c:"var(--bck)"},
+  {k:"deliv", n:"Доставка", c:"var(--deliv)"}, {k:"other", n:"Прочее", c:"var(--other)"},
 ];
-const DELIV = ["glovo","wolt","chocofood","yandex"];
-const DELIV_N = {glovo:"Glovo", wolt:"Wolt", chocofood:"Chocofood", yandex:"Яндекс"};
-const TZ = "Asia/Aqtobe";
-const fmt = n => new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(n);
-const dayKey = d => new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d); // YYYY-MM-DD
-const RU_D = d => new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"numeric",month:"long"}).format(d);
+const DELIV=["glovo","wolt","chocofood","yandex"];
+const TZ="Asia/Aqtobe";
+const fmt=n=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(n);
+const dayKey=d=>new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d);
+const RU_D=k=>new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"numeric",month:"long"}).format(new Date(k+"T12:00:00"));
+const RU_DD=k=>new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"2-digit",month:"2-digit"}).format(new Date(k+"T12:00:00"));
+const addDays=(k,n)=>{const d=new Date(k+"T12:00:00"); d.setDate(d.getDate()+n); return dayKey(d);};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-let deps = {};      // rowId -> name
-let recs = [];
+// состояние
+let recs=[], deps={}, depOrder=[], cats={}, catOrder=[], accs={}, accOrder=[];
+let expenses=[], bills=[];
+let period="today", branch=0;   // 0 = все точки
+let uiMsg="";
 
-function chanSums(rows){
-  const s = {cash:0,kaspi:0,halyk:0,bck:0,deliv:0,other:0,total:0};
-  for (const r of rows){
-    for (const c of ["cash","kaspi","halyk","bck","other"]) s[c]+=r[c]||0;
-    for (const c of DELIV) s.deliv+=r[c]||0;
-    s.total+=r.total||0;
-  }
-  return s;
+const cols=t=>{ // fetchTable колоночный → массив объектов
+  const ks=Object.keys(t); const n=t.id.length; const out=[];
+  for(let i=0;i<n;i++){ const o={}; ks.forEach(k=>o[k]=t[k][i]); out.push(o);} return out; };
+const dstr=v=> v instanceof Date ? dayKey(v) : (typeof v==="number" ? dayKey(new Date(v*1000)) : String(v||""));
+
+async function loadAll(){
+  const [d,c,a,e,b]=await Promise.all(
+    ["Departments","ExpenseCategories","Accounts","Expenses","PayQueue"].map(t=>grist.docApi.fetchTable(t)));
+  deps={}; depOrder=[];
+  cols(d).forEach(r=>{ deps[r.id]=r; if(r.is_sales) depOrder.push(r.id); });
+  cats={}; catOrder=[];
+  cols(c).forEach(r=>{ cats[r.id]=r; if(r.active!==false) catOrder.push(r.id); });
+  accs={}; accOrder=[];
+  cols(a).forEach(r=>{ accs[r.id]=r; accOrder.push(r.id); });
+  expenses=cols(e).map(r=>({...r, dk:dstr(r.date)})).sort((x,y)=>y.dk.localeCompare(x.dk)||y.id-x.id);
+  bills=cols(b).map(r=>({...r, dk:dstr(r.date_added)}));
 }
 
+function range(){
+  const today=dayKey(new Date());
+  if(period==="today") return [today,today];
+  if(period==="yest"){const y=addDays(today,-1); return [y,y];}
+  if(period==="7d") return [addDays(today,-6),today];
+  if(period==="month") return [today.slice(0,8)+"01",today];
+  return ["0000-01-01",today];
+}
+const PERIODS=[["today","Сегодня"],["yest","Вчера"],["7d","7 дней"],["month","Месяц"],["all","Всё время"]];
+
+function chanSums(rows){
+  const s={cash:0,kaspi:0,halyk:0,bck:0,deliv:0,other:0,total:0};
+  for(const r of rows){
+    for(const c of ["cash","kaspi","halyk","bck","other"]) s[c]+=r[c]||0;
+    for(const c of DELIV) s.deliv+=r[c]||0;
+    s.total+=r.total||0; }
+  return s;
+}
+const depName=id=>deps[id]?.name||("#"+id);
+const shortName=id=>depName(id).replace(/^Aport\d+\s*/,"");
+
 function render(){
-  const app = document.getElementById("app");
-  if (!recs.length){ app.innerHTML = '<div class="empty">Пока нет данных — первый прогон синка ещё не прошёл.</div>'; return; }
-  const byDay = {};
-  for (const r of recs){
-    const k = r.date instanceof Date ? dayKey(r.date) : String(r.date);
-    (byDay[k] ||= []).push(r);
-  }
-  const days = Object.keys(byDay).sort();
-  const todayK = dayKey(new Date());
-  const curK = byDay[todayK] ? todayK : days[days.length-1];   // если сегодня пусто — последний день
-  const prevK = days[days.indexOf(curK)-1];
-  const cur = chanSums(byDay[curK]), prev = prevK ? chanSums(byDay[prevK]) : null;
-  const curDate = new Date(curK+"T12:00:00");
-  const isToday = curK===todayK;
+  const app=document.getElementById("app");
+  const [from,to]=range();
+  const inR=r=>{const k=dstr(r.date); return k>=from&&k<=to&&(!branch||r.department===branch);};
+  const rows=recs.filter(inR);
+  const cur=chanSums(rows);
+  // сравнение: прошлый период той же длины
+  const len=(new Date(to)-new Date(from))/864e5+1;
+  const pFrom=addDays(from,-len), pTo=addDays(from,-1);
+  const prevRows=recs.filter(r=>{const k=dstr(r.date); return k>=pFrom&&k<=pTo&&(!branch||r.department===branch);});
+  const prev=chanSums(prevRows);
 
-  // легенда+бар
-  const parts = CH.filter(c=>cur[c.k]>0);
-  const bar = parts.map(c=>`<div style="width:${(cur[c.k]/cur.total*100).toFixed(2)}%;background:${c.c}" title="${c.n}"></div>`).join("");
-  const delivDetail = DELIV.filter(k=>byDay[curK].some(r=>r[k]>0))
-      .map(k=>`${DELIV_N[k]} ${fmt(byDay[curK].reduce((a,r)=>a+(r[k]||0),0))}`).join(" · ");
-  const legend = parts.map(c=>{
-    const extra = c.k==="deliv"&&delivDetail ? ` title="${delivDetail}"` : "";
-    return `<span class="item"${extra}><span class="dot" style="background:${c.c}"></span>${c.n}
-      <b class="mono">${fmt(cur[c.k])}</b><span class="pct">${(cur[c.k]/cur.total*100).toFixed(0)}%</span></span>`;
-  }).join("");
+  // тулбар
+  const pills=PERIODS.map(([k,n])=>`<button class="pill${period===k?" on":""}" data-p="${k}">${n}</button>`).join("");
+  const opts=[`<option value="0">Все точки</option>`,
+    ...depOrder.map(id=>`<option value="${id}"${branch===id?" selected":""}>${esc(depName(id))}</option>`)].join("");
 
-  let deltaHtml = "";
-  if (prev && prev.total>0){
-    const d = (cur.total-prev.total)/prev.total*100;
-    deltaHtml = `<span class="delta ${d>=0?"up":"down"}">${d>=0?"▲":"▼"} ${Math.abs(d).toFixed(1)}%</span>
-      <span class="vs">к ${RU_D(new Date(prevK+"T12:00:00"))} (${fmt(prev.total)} ₸${isToday?" за весь день":""})</span>`;
-  }
+  // чек
+  const parts=CH.filter(c=>cur[c.k]>0);
+  const bar=parts.map(c=>`<div style="width:${(cur[c.k]/cur.total*100).toFixed(2)}%;background:${c.c}"></div>`).join("");
+  const legend=parts.map(c=>`<span class="item"><span class="dot" style="background:${c.c}"></span>${c.n}
+      <b class="mono">${fmt(cur[c.k])}</b><span class="pct">${(cur[c.k]/cur.total*100).toFixed(0)}%</span></span>`).join("");
+  let delta="";
+  if(prev.total>0 && period!=="all"){
+    const d=(cur.total-prev.total)/prev.total*100;
+    delta=`<span class="delta ${d>=0?"up":"down"}">${d>=0?"▲":"▼"} ${Math.abs(d).toFixed(1)}%</span>
+      <span class="vs">к пред. периоду (${fmt(prev.total)} ₸)</span>`; }
+  const title=(from===to?RU_D(from):`${RU_DD(from)} – ${RU_DD(to)}`)+(branch?` · ${esc(depName(branch))}`:"");
 
-  // топ точек текущего дня
-  const pts = byDay[curK].map(r=>({name:deps[r.department]||("#"+r.department), v:r.total||0}))
-      .sort((a,b)=>b.v-a.v);
-  const maxV = pts[0]?.v||1;
-  const rows = pts.map(p=>`<div class="row${p.v===0?" zero":""}">
-      <span class="name" title="${p.name}">${p.name.replace(/^Aport\d+\s*/,"")}</span>
+  // точки
+  const byDep={};
+  rows.forEach(r=>{byDep[r.department]=(byDep[r.department]||0)+(r.total||0);});
+  const pts=(branch?[branch]:depOrder).map(id=>({id,name:shortName(id),v:byDep[id]||0})).sort((a,b)=>b.v-a.v);
+  const maxV=pts[0]?.v||1;
+  const ptRows=pts.map(p=>`<div class="row${p.v===0?" zero":""}">
+      <span class="name" title="${esc(depName(p.id))}">${esc(p.name)}</span>
       <span class="track"><div style="width:${(p.v/maxV*100).toFixed(1)}%"></div></span>
       <span class="val mono">${p.v===0?"0 — нет продаж":fmt(p.v)}</span></div>`).join("");
 
-  // 14 дней
-  const last14 = days.slice(-14);
-  const dmax = Math.max(...last14.map(k=>chanSums(byDay[k]).total),1);
-  const cols = last14.map(k=>{
-    const t = chanSums(byDay[k]).total;
-    const d = new Date(k+"T12:00:00");
-    return `<div class="day${k===todayK?" today":""}">
-      <span class="sum mono">${fmt(Math.round(t/1000))}к</span>
-      <div class="col" style="height:${Math.max(t/dmax*100,2).toFixed(1)}%" title="${RU_D(d)}: ${fmt(t)} ₸"></div>
-      <span class="lbl">${d.getDate()}</span></div>`;
-  }).join("");
+  // график 14 дней (уважает фильтр точки)
+  const byDay={};
+  recs.filter(r=>!branch||r.department===branch).forEach(r=>{const k=dstr(r.date); byDay[k]=(byDay[k]||0)+(r.total||0);});
+  const dks=Object.keys(byDay).sort().slice(-14);
+  const dmax=Math.max(...dks.map(k=>byDay[k]),1);
+  const todayK=dayKey(new Date());
+  const chart=dks.map(k=>`<div class="day${k===todayK?" today":""}" title="${RU_D(k)}: ${fmt(byDay[k])} ₸">
+      <div class="col" style="height:${Math.max(byDay[k]/dmax*100,2).toFixed(1)}%"></div>
+      <span class="lbl">${+k.slice(8)}</span></div>`).join("");
 
-  const upd = recs.map(r=>r.updated_at).sort().pop() || "";
-  app.innerHTML = `
+  // расходы (фильтр периода и точки)
+  const exp=expenses.filter(r=>r.dk>=from&&r.dk<=to&&(!branch||r.department===branch));
+  const expSum=exp.reduce((a,r)=>a+(r.amount||0),0);
+  const expList=exp.slice(0,25).map(r=>`<div class="li">
+      <span class="d mono">${RU_DD(r.dk)}</span>
+      <span class="t"><span class="cat">${esc(cats[r.category]?.name||"—")}</span>
+        <div class="sub">${esc(shortName(r.department))}${r.supplier?" · "+esc(r.supplier):""}${r.note?" · "+esc(r.note):""}</div></span>
+      <span class="a mono">−${fmt(r.amount||0)}</span></div>`).join("")
+    || `<div class="empty-line">Расходов за период нет — добавьте первый кнопкой ниже.</div>`;
+
+  // счета к оплате (всегда все неоплаченные, фильтр только по точке)
+  const unpaid=bills.filter(r=>!r.paid&&(!branch||r.department===branch)).sort((a,b)=>a.dk.localeCompare(b.dk));
+  const accSel=id=>`<select data-accfor="${id}">${accOrder.filter(a=>accs[a].name!=="Касса точки")
+      .map(a=>`<option value="${a}">${esc(accs[a].name)}</option>`).join("")}</select>`;
+  const billList=unpaid.map(r=>`<div class="li bill">
+      <span class="d mono">${r.dk?RU_DD(r.dk):""}</span>
+      <span class="t"><span class="cat">${esc(r.supplier||"Поставщик")}</span>
+        <div class="sub">${esc(shortName(r.department))}${r.request_no?" · заявка "+esc(r.request_no):""}</div></span>
+      <span class="a mono">${fmt(r.amount||0)}</span>
+      <span class="payrow">${accSel(r.id)}<button class="act small" data-pay="${r.id}">Оплачено</button></span></div>`).join("")
+    || `<div class="empty-line">Неоплаченных счетов нет. Они появятся здесь, когда закупщик выставит счёт (или добавьте вручную в таблицу PayQueue).</div>`;
+
+  // форма расхода
+  const today=dayKey(new Date());
+  const formHtml=`<details class="addform" id="addform"><summary>Добавить расход</summary>
+    <div class="form">
+      <label>Дата<input type="date" id="f-date" value="${today}"></label>
+      <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${branch===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
+      <label>Статья<select id="f-cat">${catOrder.map(id=>`<option value="${id}">${esc(cats[id].name)}</option>`).join("")}</select></label>
+      <label>Оплачено со счёта<select id="f-acc">${accOrder.map(id=>`<option value="${id}">${esc(accs[id].name)}</option>`).join("")}</select></label>
+      <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" placeholder="0"></label>
+      <label>Поставщик<input type="text" id="f-sup" placeholder="необязательно"></label>
+      <label class="wide">Комментарий<input type="text" id="f-note" placeholder="за что"></label>
+      <div class="wide"><button class="act" id="f-add">Записать расход</button>
+        <span class="msg" id="f-msg">${uiMsg}</span></div>
+    </div></details>`;
+
+  app.innerHTML=`
+    <div class="toolbar">
+      <div class="pills">${pills}</div>
+      <select id="branchSel">${opts}</select>
+      <span class="spacer"></span>
+      <button class="refresh" id="btn-refresh" title="Перечитать данные">⟳ Обновить</button>
+    </div>
     <div class="tape">
-      <div class="eyebrow">${isToday?"Сегодня":"Последний день"}, ${RU_D(curDate)} · ${pts.filter(p=>p.v>0).length} из ${pts.length} точек с продажами</div>
+      <div class="eyebrow">Выручка · ${title}</div>
       <div class="total mono">${fmt(cur.total)} <small>₸</small></div>
-      <div>${deltaHtml}</div>
-      <div class="bar">${bar}</div>
-      <div class="legend">${legend}</div>
+      <div>${delta}</div>
+      ${cur.total>0?`<div class="bar">${bar}</div><div class="legend">${legend}</div>`:`<div class="empty-line">Продаж за выбранный период нет.</div>`}
     </div>
     <div class="grid">
-      <div class="card"><h2>Точки за ${isToday?"сегодня":RU_D(curDate)} <span>· по убыванию</span></h2><div class="rows">${rows}</div></div>
-      <div class="card"><h2>Две недели <span>· итог по дням, ₸</span></h2><div class="days">${cols}</div>
-        <div class="foot">Данные обновляются каждые 2 часа с задержкой 2 ч (защита от возвратов).${upd?` Последний синк: ${upd.slice(11,16)||upd}`:""}</div>
-      </div>
+      <div class="card"><h2>Точки <span>· выручка за период</span><span class="cnt">${pts.filter(p=>p.v>0).length} из ${pts.length} с продажами</span></h2>
+        <div class="rows">${ptRows}</div></div>
+      <div class="card"><h2>Две недели <span>· ₸ в день${branch?", "+esc(shortName(branch)):""}</span></h2>
+        <div class="days">${chart}</div>
+        <div class="foot">Синк каждые 2 часа, лаг 2 ч (защита от возвратов).</div></div>
+      <div class="card"><h2>Счета к оплате<span class="cnt">${unpaid.length} шт · ${fmt(unpaid.reduce((a,r)=>a+(r.amount||0),0))} ₸</span></h2>
+        <div class="list">${billList}</div></div>
+      <div class="card"><h2>Расходы <span>· за период</span><span class="cnt">${exp.length} шт · −${fmt(expSum)} ₸</span></h2>
+        <div class="list">${expList}</div>${formHtml}</div>
     </div>`;
+  wire();
+}
+
+function epoch(k){ return Math.floor(Date.UTC(+k.slice(0,4),+k.slice(5,7)-1,+k.slice(8,10))/1000); }
+
+function wire(){
+  document.querySelectorAll(".pill").forEach(b=>b.onclick=()=>{period=b.dataset.p; uiMsg=""; render();});
+  document.getElementById("branchSel").onchange=e=>{branch=+e.target.value; uiMsg=""; render();};
+  document.getElementById("btn-refresh").onclick=async()=>{await loadAll(); render();};
+  const addBtn=document.getElementById("f-add");
+  if(addBtn) addBtn.onclick=async()=>{
+    const g=id=>document.getElementById(id);
+    const amt=parseFloat(g("f-amt").value);
+    const msg=g("f-msg");
+    if(!amt||amt<=0){ msg.className="msg err"; msg.textContent="Введите сумму."; return; }
+    addBtn.disabled=true;
+    try{
+      const dk=g("f-date").value||dayKey(new Date());
+      await grist.docApi.applyUserActions([["AddRecord","Expenses",null,{
+        date:epoch(dk), department:+g("f-dep").value, category:+g("f-cat").value,
+        amount:amt, account:+g("f-acc").value, period:dk.slice(0,7),
+        source:"казначей", supplier:g("f-sup").value.trim(), note:g("f-note").value.trim(),
+        created_by:"дашборд" }]]);
+      uiMsg="Расход записан ✓";
+      await loadAll(); render();
+      const f=document.getElementById("addform"); if(f) f.open=true;
+    }catch(e){ msg.className="msg err"; msg.textContent="Ошибка записи: "+(e.message||e); addBtn.disabled=false; }
+  };
+  document.querySelectorAll("[data-pay]").forEach(b=>b.onclick=async()=>{
+    const id=+b.dataset.pay;
+    const bill=bills.find(x=>x.id===id); if(!bill) return;
+    const accSel=document.querySelector(`[data-accfor="${id}"]`);
+    const acc=+accSel.value;
+    b.disabled=true; b.textContent="…";
+    const today=dayKey(new Date());
+    try{
+      await grist.docApi.applyUserActions([
+        ["UpdateRecord","PayQueue",id,{paid:true, paid_date:epoch(today), paid_account:acc, expense_created:true}],
+        ["AddRecord","Expenses",null,{
+          date:epoch(today), department:bill.department||0, category:bill.category||0,
+          amount:bill.amount||0, account:acc, period:today.slice(0,7), source:"закуп",
+          supplier:bill.supplier||"", note:"Оплата счёта"+(bill.request_no?" по заявке "+bill.request_no:""),
+          pay_ref:bill.bill_key||String(id), created_by:"дашборд" }]]);
+      await loadAll(); render();
+    }catch(e){ b.disabled=false; b.textContent="Оплачено"; alert("Ошибка: "+(e.message||e)); }
+  });
 }
 
 grist.ready({requiredAccess:"full"});
 grist.onRecords(async rows=>{
-  recs = rows;
-  try{
-    const t = await grist.docApi.fetchTable("Departments");
-    deps = {}; t.id.forEach((id,i)=>deps[id]=t.name[i]);
-  }catch(e){ /* имена подтянутся при следующем событии */ }
+  recs=rows;
+  try{ await loadAll(); }catch(e){ console.warn("loadAll:",e); }
   render();
 });
 </script>
