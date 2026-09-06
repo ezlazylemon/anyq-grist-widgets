@@ -706,6 +706,25 @@ function seedBase() {
   __set("q", "");
   await __render();
 
+  // ---- среднее время ожидания оплаты у поставщиков ----
+  __set("tab", "sups"); __set("q", ""); __set("modal", null);
+  await __render();
+  ok(/Ждём оплату/.test(appEl.innerHTML), "в таблице поставщиков есть столбец ожидания оплаты");
+  const supId = dbRows.Suppliers[0] && dbRows.Suppliers[0].id;
+  if (supId) {
+    const sups = __get("sups");
+    sups[supId].paid_bills_count = 2;
+    sups[supId].avg_pay_days = 3.5;
+    __set("sups", sups);
+    await __render();
+    ok(/3,5/.test(appEl.innerHTML), "среднее ожидание показано через запятую");
+    sups[supId].paid_bills_count = 0;
+    __set("sups", sups);
+    await __render();
+    ok(/—/.test(appEl.innerHTML), "без оплаченных счетов показан прочерк");
+  }
+  __set("tab", "bills"); await __render();
+
   console.log("\n" + (FAILS.length ? "ПРОВАЛ: " + FAILS.length + " проверок не прошли" : "ОК: все проверки прошли"));
   process.exit(FAILS.length ? 1 : 0);
 })().catch(e => { console.error("КРИТИЧЕСКАЯ ОШИБКА СТЕНДА:", e); process.exit(1); });

@@ -409,6 +409,8 @@ function render(){
       ${req?`<div class="sub">${esc(req)}</div>`:`<div class="sub" style="color:var(--warn)">реквизиты не заполнены</div>`}</td>
       <td class="num">${bs.length}</td><td class="num">${fmt(sum)}</td>
       <td class="num">${unpaidSum?fmt(unpaidSum):"0"}</td>
+      <td class="num" title="${s.paid_bills_count?`по ${s.paid_bills_count} оплаченным счетам`:"оплаченных счетов ещё нет"}">
+        ${s.paid_bills_count?String((s.avg_pay_days??0).toFixed(1)).replace(".",","):"—"}</td>
       <td><button class="btn sm" data-editsup="${id}">Правка</button> <button class="del" data-delsup="${id}">×</button></td></tr>`;};
 
   let body="";
@@ -437,7 +439,8 @@ function render(){
     </div>`;
   } else {
     body=`<div class="card"><h2>Поставщики<span class="cnt">${supOrder.length} шт</span></h2>
-      <table><tr><th>Поставщик</th><th>Счетов</th><th>Сумма</th><th>Не оплачено</th><th></th></tr>
+      <table><tr><th>Поставщик</th><th>Счетов</th><th>Сумма</th><th>Не оплачено</th>
+        <th title="Сколько дней в среднем проходит от выставления счёта до оплаты">Ждём оплату, дней</th><th></th></tr>
       ${supOrder.filter(id=>hit(sups[id].Name,sups[id].Contact_person,sups[id].Phone)).length
         ?supOrder.filter(id=>hit(sups[id].Name,sups[id].Contact_person,sups[id].Phone)).map(supRow).join(""):`<tr><td colspan="5" class="empty-line">Поставщиков нет.</td></tr>`}</table></div>`;
   }
