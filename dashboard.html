@@ -90,7 +90,7 @@
   .lg .vv{font-weight:600} .lg .pp{color:var(--muted); width:38px; text-align:right}
 
   .rows{display:flex; flex-direction:column; gap:4px}
-  .row{display:grid; grid-template-columns:minmax(84px,34%) 1fr auto 44px; gap:9px; align-items:center; padding:1px 0}
+  .row{display:grid; grid-template-columns:minmax(84px,30%) 1fr auto auto 44px; gap:9px; align-items:center; padding:1px 0}
   .pdelta{font-size:12px; font-weight:600; text-align:right}
   .pdelta.up{color:var(--up)} .pdelta.down{color:var(--down)}
   .row .name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -222,7 +222,7 @@ let curExp=[];   // расходы за текущий период (без уч
 let period="today",cFrom="",cTo="";
 let sel=new Set(), selInit=false;   // выбранные точки; по умолчанию — все, галочки стоят
 let openDD=false, modal=null, uiMsg="", fv={};
-let tab="money", expQuery="";       // вкладка (money | an) и поиск по расходам
+let tab="money", expQuery="", ptSort="sum";       // вкладка (money | an) и поиск по расходам
 
 const depId=v=>typeof v==="number"?v:(Array.isArray(v)?(+v[v.length-1]||0):(nameToId[String(v)]||0));
 const depName=id=>deps[id]?.name||("#"+id);
@@ -514,17 +514,24 @@ function render(){
   const byDep={},byDepPrev={};
   rvRows.forEach(r=>{const id=depId(r.department);byDep[id]=(byDep[id]||0)+(r.total||0);});
   prevRows.forEach(r=>{const id=depId(r.department);byDepPrev[id]=(byDepPrev[id]||0)+(r.total||0);});
-  const pts=depOrder.filter(inSel).map(id=>({id,v:byDep[id]||0,p:byDepPrev[id]||0})).sort((a,b)=>b.v-a.v);
-  const maxV=pts[0]?.v||1;
+  // чеки по точкам за период: даёт средний чек рядом с объёмом выручки
+  const byDepChecks={};
+  rvRows.forEach(r=>{const id=depId(r.department);byDepChecks[id]=(byDepChecks[id]||0)+(r.checks||0);});
+  const pts=depOrder.filter(inSel).map(id=>({id,v:byDep[id]||0,p:byDepPrev[id]||0,
+    ch:byDepChecks[id]||0})).sort((a,b)=>ptSort==="avg"?(b.v/(b.ch||1))-(a.v/(a.ch||1)):b.v-a.v);
+  const maxV=Math.max(...pts.map(p=>p.v),1);
   const showDelta=!openDay&&period!=="all"&&prevDays>=len;
+  const anyChecks=pts.some(p=>p.ch>0);
   const ptRows=pts.map(p=>{
     let dl="";
     if(showDelta&&p.p>0){const d=(p.v-p.p)/p.p*100;
       dl=`<span class="pdelta ${d>=0?"up":"down"}">${d>=0?"+":"−"}${Math.abs(d).toFixed(0)}%</span>`;}
+    const avg=p.ch?`<span class="avgchk num" title="${fmt(p.ch)} ${plural(p.ch,"чек","чека","чеков")}">${fmt(p.v/p.ch)}</span>`
+                  :`<span class="avgchk"></span>`;
     return `<div class="row${p.v===0?" zero":""}">
     <span class="name" title="${esc(depName(p.id))}">${esc(shortName(p.id))}</span>
     <span class="track"><i style="width:${(p.v/maxV*100).toFixed(1)}%"></i></span>
-    <span class="val num">${p.v===0?"0":fmt(p.v)}</span>${dl||`<span class="pdelta"></span>`}</div>`;}).join("")
+    <span class="val num">${p.v===0?"0":fmt(p.v)}</span>${anyChecks?avg:""}${dl||`<span class="pdelta"></span>`}</div>`;}).join("")
     ||`<div class="empty-line">Нет данных за период.</div>`;
 
   // график всегда показывает контекст последних дней; выбранный период подсвечен
@@ -613,7 +620,9 @@ function render(){
     ${chip(false,`Синк iiko: ${syncTime||"нет данных"}`,"c-chart")}
   </div>`;
 
-  const cardPoints=`<div class="card" id="c-points"><h2>Точки <span class="sub">выручка за период${showDelta?", справа к прошлому":""}</span><span class="cnt">${pts.filter(p=>p.v>0).length} из ${pts.length} с продажами</span></h2>
+  const cardPoints=`<div class="card" id="c-points"><h2>Точки
+        <span class="pills sortpills"><button class="pill${ptSort==="sum"?" on":""}" data-sort="sum">по выручке</button><button class="pill${ptSort==="avg"?" on":""}" data-sort="avg">по чеку</button></span>
+        <span class="cnt">${pts.filter(p=>p.v>0).length} из ${pts.length} с продажами</span></h2>
         <div class="rows">${ptRows}</div></div>`;
   const cardCash=`<div class="card" id="c-cash"><h2>Сверка касс <span class="sub">последние сдачи</span><span class="cnt">${crAll.length?`всего ${crAll.length}`:""}</span></h2>
         <div class="list">${crList}</div>${nhLine}</div>`;
@@ -737,6 +746,7 @@ function wire(){
   bind("btn-exp",()=>{modal="exp";fv={};uiMsg="";render();});
   bind("btn-cash",()=>{modal="bulk";fv={vals:{}};uiMsg="";render();});
   document.querySelectorAll(".pills.tabs .pill").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();});
+  document.querySelectorAll("[data-sort]").forEach(b=>b.onclick=()=>{ptSort=b.dataset.sort;render();});
   document.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>{
     if(tab!=="money"&&["c-chart"].includes(b.dataset.goto)===false){tab="money";render();}
     else if(b.dataset.goto==="c-chart"&&tab!=="an"){tab="an";render();}
