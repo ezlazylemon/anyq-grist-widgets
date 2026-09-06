@@ -159,6 +159,9 @@
   .badge.zero{color:var(--muted)}
   .warnmark{font-size:11px; color:var(--warn,#8A6A2B); border:1px solid var(--line);
     border-radius:4px; padding:1px 6px; margin-left:6px; cursor:help}
+  .clip{font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:4px;
+    padding:1px 5px; text-decoration:none; white-space:nowrap}
+  a.clip:hover{color:var(--accent); border-color:var(--accent)}
   .del{border:0; background:none; color:var(--muted); font-size:16px; line-height:1; padding:0 2px; flex:none}
   .del:hover{color:var(--down)}
   .btn.sm{padding:3px 9px; font-size:12px}
@@ -229,7 +232,8 @@ let period="today",cFrom="",cTo="";
 let sel=new Set(), selInit=false;   // выбранные точки; по умолчанию — все, галочки стоят
 let openDD=false, modal=null, uiMsg="", fv={};
 let tab="money", expQuery="", ptSort="sum";
-let loadError="";   // сбой чтения данных: показываем явно, а не нулями       // вкладка (money | an) и поиск по расходам
+let loadError="";   // сбой чтения данных: показываем явно, а не нулями
+let docId="";       // нужен для ссылок на вложения через прокси сервиса       // вкладка (money | an) и поиск по расходам
 
 const depId=v=>typeof v==="number"?v:(Array.isArray(v)?(+v[v.length-1]||0):(nameToId[String(v)]||0));
 const depName=id=>deps[id]?.name||("#"+id);
@@ -240,6 +244,7 @@ const cols=t=>{const ks=Object.keys(t),n=t.id.length,out=[];
 const dstr=v=>v instanceof Date?dayKey(v):(typeof v==="number"?dayKey(new Date(v*1000)):String(v||""));
 
 async function loadAll(){
+  if(!docId){ try{ docId=(await grist.docApi.getDocName?.())||""; }catch(e){ docId=""; } }
   const [d,c,a,e,b,cr]=await Promise.all(
     ["Departments","ExpenseCategories","Accounts","Expenses","PayQueue","CashReconciliation"]
     .map(t=>grist.docApi.fetchTable(t)));
@@ -419,6 +424,11 @@ function buildExpList(){
       <span class="t"><b>${esc(cats[r.category]?.name||"—")}</b>
         <div class="sub">${esc(shortName(r.department))}${r.supplier?", "+esc(r.supplier):""}${r.note?", "+esc(r.note):""}${accs[r.account]?", "+esc(accs[r.account].name):""}</div></span>
       <span class="a num">${fmtExp(r.amount)}</span>
+      ${Array.isArray(r.attachment)&&r.attachment.length>1
+        ?(docId?`<a class="clip" href="/file?doc=${encodeURIComponent(docId)}&att=${r.attachment[1]}"
+             target="_blank" rel="noopener" title="Открыть документ">файл</a>`
+               :`<span class="clip">файл</span>`)
+        :""}
       <button class="del" data-delexp="${r.id}" title="Удалить">×</button></div>`;}).join("")
     ||`<div class="empty-line">${q?"Ничего не найдено.":"Расходов за период нет."}</div>`;
 }
@@ -874,7 +884,6 @@ function wire(){
         const file=fi&&fi.files&&fi.files[0];
         if(file){
           try{
-            const docId=(await grist.docApi.getDocName?.())||"";
             const ids=await uploadFile(file,docId);
             if(ids&&ids.length)flds.attachment=["L",...ids];
           }catch(e){ fileNote=" Файл не прикрепился ("+(e.message||e)+")."; }

@@ -654,6 +654,23 @@ async function main() {
     String(G("uiMsg")).includes("Файл не прикрепился"));
   markupSane(appEl.innerHTML, "расход со сбоем файла");
 
+  // ---- 20. вложение расхода видно ссылкой ----
+  resetBackend();
+  store.Expenses = { id: [41], date: [T0], department: [1], category: [1], amount: [900],
+    account: [1], period: ["2026-09"], source: ["казначей"], supplier: [""], note: ["с чеком"],
+    created_by: ["t"], pay_ref: [""], attachment: [["L", 7]] };
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000 })]);
+  S("docId", "abc123");
+  h = await render();
+  check("расход с вложением помечен", h.includes(">файл<"));
+  check("вложение ведёт на прокси файла",
+    h.includes("/file?doc=abc123&att=7") || h.includes("/file?doc=abc123&amp;att=7"));
+  markupSane(h, "вложение расхода");
+  S("docId", "");
+  h = await render();
+  check("без id документа метка остаётся, но без ссылки",
+    h.includes(">файл<") && !h.includes("/file?doc="));
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");
