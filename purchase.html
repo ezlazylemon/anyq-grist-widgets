@@ -182,7 +182,7 @@ function modalHtml(){
         <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${+fv.dep===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
         <label>Поставщик<select id="f-sup"><option value="0">— выбрать —</option>
           ${supOrder.map(id=>`<option value="${id}"${+fv.sup===id?" selected":""}>${esc(supName(id))}</option>`).join("")}</select></label>
-        <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${fv.amt||""}" placeholder="0"></label>
+        <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${esc(fv.amt||"")}" placeholder="0"></label>
         <label class="widef">Заявка<select id="f-req"><option value="0">— без заявки —</option>
           ${reqs.map(r=>`<option value="${r.id}"${+fv.req===r.id?" selected":""}>${esc(String(r.PR_Number||("заявка "+r.id)))} · ${esc(depName(reqDep(r)))} · ${fmt(reqTotal(r))} ₸</option>`).join("")}</select></label>
         <label class="widef">Файл счёта<input type="file" id="f-file" accept="image/*,application/pdf"></label>
@@ -444,8 +444,12 @@ function wire(){
       render();
     }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}};
   const s1=document.getElementById("f-save"),s2=document.getElementById("f-saveready");
-  if(s1)s1.onclick=()=>save(false);
-  if(s2)s2.onclick=()=>save(true);
+  // блокируем обе кнопки сразу по клику: без этого двойной клик (или просто
+  // медленная сеть/загрузка файла) успевает вызвать save() дважды и создаёт
+  // счёт-дубль ДО того, как первый ответ применит правку/пересоздаст форму
+  const lockSave=()=>{if(s1)s1.disabled=true;if(s2)s2.disabled=true;};
+  if(s1)s1.onclick=()=>{lockSave();save(false);};
+  if(s2)s2.onclick=()=>{lockSave();save(true);};
  }catch(e){console.error("wire:",e);}
 }
 
