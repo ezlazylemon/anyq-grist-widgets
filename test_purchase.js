@@ -70,7 +70,8 @@ function makeEl(tag, attrs, selectValue) {
 }
 
 let idIndex = {}, dataIndex = {};
-const WATCHED_DATA = ["tab","close","billfor","editbill","delbill","ready","unready","part"];
+const WATCHED_DATA = ["tab","close","billfor","editbill","delbill","ready","unready","part",
+  "order","received","editreq","delreq","delitemrow","editsup","delsup"];
 
 function reindex(htmlStr) {
   idIndex = {}; dataIndex = {}; WATCHED_DATA.forEach(k => dataIndex[k] = []);
@@ -130,7 +131,7 @@ global.location = { origin: "https://work.anyq.chat", hostname: "work.anyq.chat"
 global.Event = class {};
 
 // ---------- фикстуры и grist-мок ----------
-let seq = { Bills: 100 };
+let seq = { Bills: 100, Purchase_requests: 100, Purchase_Request_Items: 100, Suppliers: 100 };
 const dbRows = {
   Purchase_requests: [],
   Purchase_Request_Items: [],
@@ -154,20 +155,27 @@ async function fetchTable(t) {
 }
 async function applyUserActions(actions) {
   actionLog.push(...actions.map(a => JSON.parse(JSON.stringify(a))));
+  // как настоящий Grist: возвращает retValues — id новых записей в порядке
+  // действий (нужно purchase.html, чтобы узнать id только что созданной заявки/поставщика)
+  const retValues = [];
   for (const a of actions) {
     const [kind, table, id, fields] = a;
     const rows = dbRows[table];
     if (kind === "AddRecord") {
       const newId = ++seq[table];
       rows.push(Object.assign({ id: newId }, fields));
+      retValues.push(newId);
     } else if (kind === "UpdateRecord") {
       const row = rows.find(r => r.id === id);
       if (row) Object.assign(row, fields);
+      retValues.push(null);
     } else if (kind === "RemoveRecord") {
       const i = rows.findIndex(r => r.id === id);
       if (i >= 0) rows.splice(i, 1);
+      retValues.push(null);
     }
   }
+  return { retValues };
 }
 global.grist = {
   ready() {},
@@ -232,7 +240,7 @@ function seedBase() {
     // заявка 4: получена, позиций нет (используется Total_amount)
   );
   dbRows.Bills.length = 0;
-  seq.Bills = 100;
+  seq.Bills = 100; seq.Purchase_requests = 100; seq.Purchase_Request_Items = 100; seq.Suppliers = 100;
   actionLog.length = 0;
 }
 
@@ -443,6 +451,233 @@ function seedBase() {
   __set("tab", "bills");
   console.error = origErr;
   ok(wireCaught === 0, "wire() ни разу не падал с исключением на всех вкладках/состояниях");
+
+  // ===================== новый функционал закупщика =====================
+
+  // 17) Поставщики: создание, правка, запрет удаления используемого,
+  // удаление неиспользуемого, двойной клик по кнопкам не плодит дублей/сбоев
+  __set("tab", "sups"); __render();
+  const addSupBtn = document.getElementById("btn-sup");
+  ok(!!addSupBtn, "кнопка «+ Поставщик» найдена");
+  addSupBtn.click();
+  ok(__get("modal") === "sup", "модалка поставщика открылась");
+  document.getElementById("s-name").value = "ТОО Новый";
+  document.getElementById("s-contact").value = "Петров";
+  document.getElementById("s-phone").value = "+7 701";
+  document.getElementById("s-address").value = "ул. Тестовая, 1";
+  const supAddsBefore = actionLog.filter(a => a[0] === "AddRecord" && a[1] === "Suppliers").length;
+  let sSaveBtn = document.getElementById("s-save");
+  sSaveBtn.click(); sSaveBtn.click(); // двойной клик
+  ok(sSaveBtn.disabled === true, "кнопка «Создать» поставщика блокируется по клику");
+  await new Promise(r => setTimeout(r, 10));
+  const supAddsAfter = actionLog.filter(a => a[0] === "AddRecord" && a[1] === "Suppliers").length;
+  ok(supAddsAfter - supAddsBefore === 1, "двойной клик по созданию поставщика не создал дубль: было " + (supAddsAfter - supAddsBefore));
+  ok(dbRows.Suppliers.some(s => s.Name === "ТОО Новый"), "поставщик действительно создан");
+  ok(__get("modal") === null, "модалка поставщика закрылась после создания (не «быстрое» открытие)");
+
+  __render();
+  const newSup = dbRows.Suppliers.find(s => s.Name === "ТОО Новый");
+  const editSupBtn = byData("editsup", newSup.id);
+  ok(!!editSupBtn, "кнопка «Правка» поставщика найдена");
+  editSupBtn.click();
+  ok(Number(__get("fv").id) === newSup.id, "форма правки поставщика: id сохранён");
+  document.getElementById("s-phone").value = "+7 702";
+  const supUpdsBefore = actionLog.filter(a => a[0] === "UpdateRecord" && a[1] === "Suppliers" && a[2] === newSup.id).length;
+  sSaveBtn = document.getElementById("s-save");
+  sSaveBtn.click(); sSaveBtn.click(); // двойное «Сохранить»
+  await new Promise(r => setTimeout(r, 10));
+  const supUpdsAfter = actionLog.filter(a => a[0] === "UpdateRecord" && a[1] === "Suppliers" && a[2] === newSup.id).length;
+  ok(supUpdsAfter - supUpdsBefore === 1, "двойное «Сохранить» правки поставщика применилось ровно один раз");
+  ok(dbRows.Suppliers.find(s => s.id === newSup.id).Phone === "+7 702", "телефон поставщика обновился");
+
+  __render();
+  let delSupBtn = byData("delsup", 1); // «ТОО Ромашка» — используется в счетах/позициях
+  ok(!!delSupBtn, "кнопка удаления поставщика-1 найдена");
+  delSupBtn.click();
+  ok(__get("modal") === "delsup", "модалка удаления поставщика открылась");
+  ok(__get("fv").blocked === true, "используемый поставщик помечен как неудаляемый");
+  ok(!document.getElementById("f-delsup"), "кнопки «Удалить» нет, когда поставщик используется");
+  ok(/Нельзя удалить/.test(appEl.innerHTML), "объяснение о запрете удаления показано");
+
+  __set("modal", null); __render();
+  delSupBtn = byData("delsup", newSup.id); // неиспользуемый «ТОО Новый»
+  delSupBtn.click();
+  ok(__get("fv").blocked === false, "неиспользуемый поставщик можно удалить");
+  const supsBefore = dbRows.Suppliers.length;
+  const fDelSup = document.getElementById("f-delsup");
+  ok(!!fDelSup, "кнопка «Удалить» есть для неиспользуемого поставщика");
+  fDelSup.click(); fDelSup.click(); // двойной клик
+  await new Promise(r => setTimeout(r, 10));
+  ok(dbRows.Suppliers.length === supsBefore - 1, "неиспользуемый поставщик удалён ровно один раз (двойной клик не сломал)");
+  ok(__get("modal") === null, "модалка закрылась после удаления поставщика");
+
+  // 18) Заявки: создание с позициями прямо в модальном окне + генерация PR-номера
+  __set("tab", "reqs"); __render();
+  const addReqBtn = document.getElementById("btn-req");
+  ok(!!addReqBtn, "кнопка «+ Заявка» найдена");
+  addReqBtn.click();
+  ok(__get("modal") === "req", "модалка заявки открылась");
+  document.getElementById("r-dep").value = "2";
+  document.getElementById("r-by").value = "Света";
+  document.getElementById("r-priority").value = "Срочно";
+  document.getElementById("r-ed").value = "2026-09-20";
+  document.getElementById("r-status").value = "Approved";
+  let addItemBtn = document.getElementById("r-additem");
+  ok(!!addItemBtn, "кнопка «+ строка» найдена");
+  addItemBtn.click(); // строка 1
+  let keys = (__get("fv").itemsList || []).map(it => it._key);
+  ok(keys.length === 1, "после «+ строка» появилась одна позиция");
+  document.getElementById("ri-name-" + keys[0]).value = "Молоток";
+  document.getElementById("ri-qty-" + keys[0]).value = "3";
+  document.getElementById("ri-price-" + keys[0]).value = "1500";
+  document.getElementById("ri-sup-" + keys[0]).value = "1";
+  addItemBtn = document.getElementById("r-additem"); // форма пересобрана — берём свежую кнопку
+  addItemBtn.click(); // строка 2, первая не должна потеряться
+  keys = (__get("fv").itemsList || []).map(it => it._key);
+  ok(keys.length === 2, "после второго «+ строка» — две позиции, первая не потеряна");
+  ok((__get("fv").itemsList || [])[0].name === "Молоток", "данные первой строки сохранились при добавлении второй");
+  document.getElementById("ri-name-" + keys[1]).value = "Гвозди";
+  document.getElementById("ri-qty-" + keys[1]).value = "10";
+  document.getElementById("ri-price-" + keys[1]).value = "50";
+
+  ok(__get("nextPRNumber")() === "PR-0005", "следующий PR-номер вычислен как PR-0005 (максимум PR-4)");
+  const reqAddsBefore = actionLog.filter(a => a[0] === "AddRecord" && a[1] === "Purchase_requests").length;
+  const itemAddsBefore = actionLog.filter(a => a[0] === "AddRecord" && a[1] === "Purchase_Request_Items").length;
+  let rSaveBtn = document.getElementById("r-save");
+  ok(!!rSaveBtn, "кнопка «Создать» заявки найдена");
+  rSaveBtn.click(); rSaveBtn.click(); // двойной клик
+  ok(rSaveBtn.disabled === true, "кнопка «Создать» заявки блокируется по клику");
+  await new Promise(r => setTimeout(r, 15));
+  const reqAddsAfter = actionLog.filter(a => a[0] === "AddRecord" && a[1] === "Purchase_requests").length;
+  const itemAddsAfter = actionLog.filter(a => a[0] === "AddRecord" && a[1] === "Purchase_Request_Items").length;
+  ok(reqAddsAfter - reqAddsBefore === 1, "двойной клик по «Создать» заявку не создал дубль заявки");
+  ok(itemAddsAfter - itemAddsBefore === 2, "созданы ровно две позиции заявки (не задублированы двойным кликом)");
+  ok(__get("modal") === null, "модалка заявки закрылась после создания");
+
+  const newReq = dbRows.Purchase_requests.find(r => r.Requested_by === "Света");
+  ok(!!newReq, "новая заявка появилась в хранилище");
+  ok(newReq.PR_Number === "PR-0005", "PR-номер сгенерирован автоматически: " + newReq.PR_Number);
+  ok(newReq.department_ref === 2, "заявка сохранена с выбранной точкой (department_ref)");
+  ok(newReq.Priority === "Срочно" && newReq.Status === "Approved", "приоритет и статус сохранены");
+  ok(Math.abs(newReq.Total_amount - 5000) < 0.01, "итог заявки = сумма позиций (3*1500+10*50=5000): " + newReq.Total_amount);
+  const newItems = dbRows.Purchase_Request_Items.filter(i => i.Request_ID === newReq.id);
+  ok(newItems.length === 2, "у новой заявки сохранены обе позиции");
+  ok(newItems.some(i => i.Item_name === "Молоток" && i.Quantity === 3 && i.Unit_price === 1500 && i.Supplier === 1),
+    "позиция «Молоток» сохранена корректно (кол-во/цена/поставщик)");
+  ok(newItems.some(i => i.Item_name === "Гвозди" && i.Total_price === 500), "позиция «Гвозди» и её сумма сохранены");
+
+  // 19) Правка заявки: удаление позиции, добавление новой, пересчёт суммы
+  __set("tab", "reqs"); __render();
+  const editReqBtn = byData("editreq", newReq.id);
+  ok(!!editReqBtn, "кнопка «Правка» заявки найдена");
+  editReqBtn.click();
+  ok(Number(__get("fv").id) === newReq.id, "форма правки заявки: id сохранён");
+  const curKeys = (__get("fv").itemsList || []).map(it => it._key);
+  ok(curKeys.length === 2, "в форме правки подгружены обе существующие позиции");
+  const delRowBtn = byData("delitemrow", curKeys[1]); // «Гвозди»
+  ok(!!delRowBtn, "кнопка удаления строки позиции найдена");
+  delRowBtn.click(); delRowBtn.click(); // двойной клик по удалению строки не должен падать/дублировать
+  ok((__get("fv").itemsList || []).length === 1, "позиция «Гвозди» убрана из формы (двойной клик не сломал)");
+  addItemBtn = document.getElementById("r-additem");
+  addItemBtn.click();
+  const keys2 = (__get("fv").itemsList || []).map(it => it._key);
+  ok(keys2.length === 2, "после удаления одной и добавления одной — снова две позиции");
+  const brandNewKey = keys2[1];
+  document.getElementById("ri-name-" + brandNewKey).value = "Скотч";
+  document.getElementById("ri-qty-" + brandNewKey).value = "4";
+  document.getElementById("ri-price-" + brandNewKey).value = "200";
+
+  const itemAdds2Before = actionLog.filter(a => a[0] === "AddRecord" && a[1] === "Purchase_Request_Items").length;
+  const itemRemBefore = actionLog.filter(a => a[0] === "RemoveRecord" && a[1] === "Purchase_Request_Items").length;
+  const reqUpdsBefore = actionLog.filter(a => a[0] === "UpdateRecord" && a[1] === "Purchase_requests" && a[2] === newReq.id).length;
+  rSaveBtn = document.getElementById("r-save");
+  rSaveBtn.click(); rSaveBtn.click(); // двойное «Сохранить»
+  await new Promise(r => setTimeout(r, 15));
+  const itemAdds2After = actionLog.filter(a => a[0] === "AddRecord" && a[1] === "Purchase_Request_Items").length;
+  const itemRemAfter = actionLog.filter(a => a[0] === "RemoveRecord" && a[1] === "Purchase_Request_Items").length;
+  const reqUpdsAfter = actionLog.filter(a => a[0] === "UpdateRecord" && a[1] === "Purchase_requests" && a[2] === newReq.id).length;
+  ok(itemAdds2After - itemAdds2Before === 1, "добавлена ровно одна новая позиция «Скотч» (не задублирована)");
+  ok(itemRemAfter - itemRemBefore === 1, "убранная позиция «Гвозди» удалена из Grist ровно один раз");
+  ok(reqUpdsAfter - reqUpdsBefore === 1, "заявка обновлена ровно один раз при двойном клике «Сохранить»");
+  const itemsAfterEdit = dbRows.Purchase_Request_Items.filter(i => i.Request_ID === newReq.id);
+  ok(itemsAfterEdit.length === 2, "у заявки теперь две позиции: «Молоток» и «Скотч»");
+  ok(itemsAfterEdit.some(i => i.Item_name === "Скотч" && i.Total_price === 800), "позиция «Скотч» сохранена с верной суммой (4*200)");
+  ok(!itemsAfterEdit.some(i => i.Item_name === "Гвозди"), "позиция «Гвозди» больше не существует");
+  const reqAfterEdit = dbRows.Purchase_requests.find(r => r.id === newReq.id);
+  ok(Math.abs(reqAfterEdit.Total_amount - (3 * 1500 + 800)) < 0.01, "итог заявки пересчитан после правки позиций: " + reqAfterEdit.Total_amount);
+  ok(reqAfterEdit.PR_Number === "PR-0005", "PR-номер при правке не перегенерируется, если уже был присвоен");
+
+  // 20) Заявки: быстрые статусы «Заказано»/«Получено» прямо в строке, без дублей по двойному клику
+  __set("modal", null); __render();
+  const orderBtn = byData("order", newReq.id);
+  ok(!!orderBtn, "кнопка «Заказано» найдена для заявки в работе");
+  orderBtn.click(); orderBtn.click(); // двойной клик
+  await new Promise(r => setTimeout(r, 10));
+  const ordUpds = actionLog.filter(a => a[0] === "UpdateRecord" && a[1] === "Purchase_requests" && a[2] === newReq.id && a[3].Status === "Ordered").length;
+  ok(ordUpds === 1, "двойной клик «Заказано» применился ровно один раз");
+  ok(dbRows.Purchase_requests.find(r => r.id === newReq.id).Status === "Ordered", "статус заявки сменился на Ordered");
+
+  __render();
+  const recvBtn = byData("received", newReq.id);
+  ok(!!recvBtn, "кнопка «Получено» найдена");
+  recvBtn.click(); recvBtn.click(); // двойной клик
+  await new Promise(r => setTimeout(r, 10));
+  const recvUpds = actionLog.filter(a => a[0] === "UpdateRecord" && a[1] === "Purchase_requests" && a[2] === newReq.id && a[3].Is_received === true).length;
+  ok(recvUpds === 1, "двойной клик «Получено» применился ровно один раз");
+  const gotReq = dbRows.Purchase_requests.find(r => r.id === newReq.id);
+  ok(gotReq.Is_received === true && gotReq.Status === "Received", "заявка помечена полученной (Is_received=true + Status=Received)");
+
+  // 21) Быстрое создание поставщика прямо из формы счёта («+ создать поставщика»)
+  __set("tab", "bills"); __render();
+  document.getElementById("btn-bill").click();
+  const fSup = document.getElementById("f-sup");
+  fSup.value = "__new__";
+  fSup.onchange();
+  ok(__get("modal") === "sup", "выбор «+ создать поставщика» в счёте открыл форму поставщика");
+  document.getElementById("s-name").value = "Экспресс Снаб";
+  const quickSupBefore = dbRows.Suppliers.length;
+  document.getElementById("s-save").click();
+  await new Promise(r => setTimeout(r, 10));
+  ok(dbRows.Suppliers.length === quickSupBefore + 1, "поставщик создан из формы счёта");
+  ok(__get("modal") === "bill", "после создания поставщика форма счёта вернулась (не закрылась целиком)");
+  const quickSup1 = dbRows.Suppliers.find(s => s.Name === "Экспресс Снаб");
+  ok(Number(__get("fv").sup) === quickSup1.id, "новый поставщик подставлен в поле «Поставщик» формы счёта");
+  __set("modal", null); __render();
+
+  // 22) Быстрое создание поставщика прямо из строки позиции заявки
+  __set("tab", "reqs"); __render();
+  document.getElementById("btn-req").click();
+  document.getElementById("r-additem").click();
+  const ik = (__get("fv").itemsList || [])[0]._key;
+  const riSup = document.getElementById("ri-sup-" + ik);
+  riSup.value = "__new__";
+  riSup.onchange();
+  ok(__get("modal") === "sup", "выбор «+ создать поставщика» в строке позиции открыл форму поставщика");
+  document.getElementById("s-name").value = "Стройбаза №2";
+  document.getElementById("s-save").click();
+  await new Promise(r => setTimeout(r, 10));
+  ok(__get("modal") === "req", "после создания поставщика форма заявки вернулась");
+  const quickSup2 = dbRows.Suppliers.find(s => s.Name === "Стройбаза №2");
+  const restoredItem = (__get("fv").itemsList || []).find(it => it._key === ik);
+  ok(!!restoredItem && Number(restoredItem.sup) === quickSup2.id, "новый поставщик подставлен именно в ту строку позиции, из которой был вызван");
+  __set("modal", null); __render();
+
+  // 23) Удаление заявки вместе со всеми её позициями (каскад), двойной клик не ломает
+  __set("tab", "reqs"); __render();
+  const delReqBtn = byData("delreq", newReq.id);
+  ok(!!delReqBtn, "кнопка удаления заявки найдена");
+  delReqBtn.click();
+  ok(__get("modal") === "delreq", "модалка удаления заявки открылась");
+  ok(/вместе с позициями/.test(appEl.innerHTML), "предупреждение о каскадном удалении позиций показано");
+  const reqsBeforeDel = dbRows.Purchase_requests.length;
+  ok(dbRows.Purchase_Request_Items.filter(i => i.Request_ID === newReq.id).length === 2, "перед удалением у заявки есть позиции");
+  const fDelReq = document.getElementById("f-delreq");
+  fDelReq.click(); fDelReq.click(); // двойной клик
+  await new Promise(r => setTimeout(r, 10));
+  ok(dbRows.Purchase_requests.length === reqsBeforeDel - 1, "заявка удалена");
+  ok(!dbRows.Purchase_requests.some(r => r.id === newReq.id), "заявки больше нет в хранилище");
+  ok(dbRows.Purchase_Request_Items.filter(i => i.Request_ID === newReq.id).length === 0, "все позиции удалённой заявки тоже удалены");
+  ok(__get("modal") === null, "модалка удаления заявки закрылась");
 
   console.log("\n" + (FAILS.length ? "ПРОВАЛ: " + FAILS.length + " проверок не прошли" : "ОК: все проверки прошли"));
   process.exit(FAILS.length ? 1 : 0);

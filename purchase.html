@@ -101,6 +101,9 @@ const cols=t=>{const ks=Object.keys(t),n=t.id.length,out=[];
 
 let reqs=[],items=[],sups={},supOrder=[],deps={},depOrder=[],bills=[];
 let tab="bills", modal=null, fv={}, uiMsg="", noBills=false;
+// modalReturn: куда вернуть id только что созданного поставщика, если форма
+// поставщика была открыта «быстрым» способом поверх счёта/позиции заявки
+let prevModal=null, prevFv=null, modalReturn=null, itemKeySeq=1;
 
 const depName=id=>deps[id]?.name||"";
 const supName=id=>sups[id]?.Name||"";
@@ -170,6 +173,37 @@ function billStatus(b){
   return {cls:"draft",txt:"черновик"};
 }
 
+const rowTotal=it=>{const q=parseFloat(it.qty)||0,p=parseFloat(it.price)||0;return q*p;};
+
+function nextPRNumber(){
+  let max=0;
+  reqs.forEach(r=>{const m=/^PR-(\d+)$/.exec(String(r.PR_Number||"").trim()); if(m)max=Math.max(max,+m[1]);});
+  return "PR-"+String(max+1).padStart(4,"0");
+}
+
+// открыть мини-форму поставщика поверх текущей (счёт/позиция заявки);
+// после сохранения новый id возвращается в исходную форму через modalReturn
+function openSupplierQuick(returnTo){
+  prevModal=modal; prevFv=fv; modalReturn=returnTo;
+  modal="sup"; fv={}; uiMsg=""; render();
+}
+
+// снимок формы заявки: и «шапка», и позиции — иначе add/remove строки
+// теряет то, что закупщик уже успел напечатать в других полях/строках
+function grabReqForm(){
+  const g=id=>document.getElementById(id);
+  const itemsList=(fv.itemsList||[]).map(it=>{
+    const name=g("ri-name-"+it._key)?.value, qty=g("ri-qty-"+it._key)?.value,
+      price=g("ri-price-"+it._key)?.value, supEl=g("ri-sup-"+it._key);
+    return {...it,
+      name:name!==undefined?name:it.name, qty:qty!==undefined?qty:it.qty,
+      price:price!==undefined?price:it.price, sup:supEl?supEl.value:it.sup};
+  });
+  return {...fv, id:fv.id,
+    dep:g("r-dep")?.value, by:g("r-by")?.value, priority:g("r-priority")?.value,
+    ed:g("r-ed")?.value, status:g("r-status")?.value, itemsList};
+}
+
 function modalHtml(){
   if(!modal)return"";
   const todayK=dayKey(new Date());
@@ -181,7 +215,8 @@ function modalHtml(){
         <label>Дата счёта<input type="date" id="f-date" value="${fv.date||todayK}"></label>
         <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${+fv.dep===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
         <label>Поставщик<select id="f-sup"><option value="0">— выбрать —</option>
-          ${supOrder.map(id=>`<option value="${id}"${+fv.sup===id?" selected":""}>${esc(supName(id))}</option>`).join("")}</select></label>
+          ${supOrder.map(id=>`<option value="${id}"${+fv.sup===id?" selected":""}>${esc(supName(id))}</option>`).join("")}
+          <option value="__new__">+ создать поставщика</option></select></label>
         <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${esc(fv.amt||"")}" placeholder="0"></label>
         <label class="widef">Заявка<select id="f-req"><option value="0">— без заявки —</option>
           ${reqs.map(r=>`<option value="${r.id}"${+fv.req===r.id?" selected":""}>${esc(String(r.PR_Number||("заявка "+r.id)))} · ${esc(depName(reqDep(r)))} · ${fmt(reqTotal(r))} ₸</option>`).join("")}</select></label>
@@ -209,6 +244,70 @@ function modalHtml(){
       <h3>Удалить счёт<button class="x" data-close>×</button></h3>
       <div class="form"><div class="hint widef">${esc(fv.label||"")}</div>
         <div class="widef"><button class="btn primary" id="f-del">Удалить</button>
+          <button class="btn" data-close>Отмена</button>
+          <span class="msg err">${esc(uiMsg)}</span></div></div></div></div>`;
+  }
+  if(modal==="req"){
+    const list=fv.itemsList||[];
+    const total=list.reduce((s,it)=>s+rowTotal(it),0);
+    const supOpts=cur=>`<option value="0">— без поставщика —</option>`+
+      supOrder.map(id=>`<option value="${id}"${+cur===id?" selected":""}>${esc(supName(id))}</option>`).join("")+
+      `<option value="__new__">+ создать поставщика</option>`;
+    const rows=list.map(it=>`<tr>
+        <td><input type="text" id="ri-name-${esc(it._key)}" value="${esc(it.name||"")}" placeholder="наименование" style="width:100%"></td>
+        <td><input type="number" id="ri-qty-${esc(it._key)}" min="0" step="1" value="${esc(it.qty??1)}" style="width:56px"></td>
+        <td><input type="number" id="ri-price-${esc(it._key)}" min="0" step="1" value="${esc(it.price??0)}" style="width:84px"></td>
+        <td><select id="ri-sup-${esc(it._key)}">${supOpts(it.sup||0)}</select></td>
+        <td class="num">${fmt(rowTotal(it))}</td>
+        <td><button type="button" class="del" data-delitemrow="${esc(it._key)}">×</button></td>
+      </tr>`).join("");
+    return `<div class="mback" data-close><div class="modal" style="max-width:640px">
+      <h3>${fv.id?"Правка заявки":"Новая заявка"}<button class="x" data-close>×</button></h3>
+      <div class="form">
+        <label>Точка<select id="r-dep">${depOrder.map(id=>`<option value="${id}"${+fv.dep===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
+        <label>Кто заказал<input type="text" id="r-by" value="${esc(fv.by||"")}"></label>
+        <label>Приоритет<select id="r-priority">
+          ${["Срочно","Планово","Низкий"].map(p=>`<option value="${p}"${fv.priority===p?" selected":""}>${p}</option>`).join("")}</select></label>
+        <label>Ожидаемая дата<input type="date" id="r-ed" value="${esc(fv.ed||"")}"></label>
+        <label class="widef">Статус<select id="r-status">
+          ${["Pending","Approved","Rejected","Ordered","Received"].map(s=>`<option value="${s}"${fv.status===s?" selected":""}>${s}</option>`).join("")}</select></label>
+        <div class="widef">
+          <table><tr><th>Наименование</th><th>Кол-во</th><th>Цена</th><th>Поставщик</th><th>Сумма</th><th></th></tr>
+          ${rows||`<tr><td colspan="6" class="empty-line">Позиций нет.</td></tr>`}</table>
+          <button type="button" class="btn sm" id="r-additem" style="margin-top:6px">+ строка</button>
+        </div>
+        <div class="hint widef">Итого по позициям: ${fmt(total)} ₸</div>
+        <div class="widef">
+          <button class="btn primary" id="r-save">${fv.id?"Сохранить":"Создать"}</button>
+          <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
+      </div></div></div>`;
+  }
+  if(modal==="delreq"){
+    return `<div class="mback" data-close><div class="modal">
+      <h3>Удалить заявку<button class="x" data-close>×</button></h3>
+      <div class="form"><div class="hint widef">${esc(fv.label||"")}</div>
+        <div class="widef"><button class="btn primary" id="f-delreq">Удалить</button>
+          <button class="btn" data-close>Отмена</button>
+          <span class="msg err">${esc(uiMsg)}</span></div></div></div></div>`;
+  }
+  if(modal==="sup"){
+    return `<div class="mback" data-close><div class="modal">
+      <h3>${fv.id?"Правка поставщика":"Новый поставщик"}<button class="x" data-close>×</button></h3>
+      <div class="form">
+        <label class="widef">Название<input type="text" id="s-name" value="${esc(fv.name||"")}"></label>
+        <label>Контактное лицо<input type="text" id="s-contact" value="${esc(fv.contact||"")}"></label>
+        <label>Телефон<input type="text" id="s-phone" value="${esc(fv.phone||"")}"></label>
+        <label class="widef">Адрес<input type="text" id="s-address" value="${esc(fv.address||"")}"></label>
+        <div class="widef">
+          <button class="btn primary" id="s-save">${fv.id?"Сохранить":"Создать"}</button>
+          <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
+      </div></div></div>`;
+  }
+  if(modal==="delsup"){
+    return `<div class="mback" data-close><div class="modal">
+      <h3>Удалить поставщика<button class="x" data-close>×</button></h3>
+      <div class="form"><div class="hint widef${fv.blocked?" warn":""}">${esc(fv.blocked?fv.reason:fv.label||"")}</div>
+        <div class="widef">${fv.blocked?"":'<button class="btn primary" id="f-delsup">Удалить</button>'}
           <button class="btn" data-close>Отмена</button>
           <span class="msg err">${esc(uiMsg)}</span></div></div></div></div>`;
   }
@@ -262,13 +361,19 @@ function render(){
     const st=r.Is_received?{cls:"ok",txt:"получено"}
       :(r.ed&&r.ed<todayK)?{cls:"late",txt:"просрочено"}
       :{cls:"wait",txt:esc(r.Status||"в работе")};
+    const acts=[];
+    if(!r.Is_received&&r.Status!=="Ordered")acts.push(`<button class="btn sm" data-order="${r.id}">Заказано</button>`);
+    if(!r.Is_received)acts.push(`<button class="btn sm" data-received="${r.id}">Получено</button>`);
+    if(!(covered>=total&&has.length))acts.push(`<button class="btn ghost sm" data-billfor="${r.id}">Выставить счёт</button>`);
+    acts.push(`<button class="btn sm" data-editreq="${r.id}">Правка</button>`);
+    acts.push(`<button class="del" data-delreq="${r.id}">×</button>`);
     return `<div class="li">
       <span class="d num">${RU_DD(r.ed)}</span>
       <span class="t"><b>${esc(String(r.PR_Number||("Заявка "+r.id)))}</b>
         <div class="sub">${esc(depName(dep))}${r.Requested_by?", "+esc(r.Requested_by):""}${has.length?`, счетов: ${has.length}${paidSum?" (оплачено "+fmt(paidSum)+")":""}`:", счёта нет"}${restTxt}</div></span>
       <span class="a num">${fmt(total)}</span>
       <span class="badge ${st.cls}">${st.txt}</span>
-      <span class="acts">${covered>=total&&has.length?"":`<button class="btn ghost sm" data-billfor="${r.id}">Выставить счёт</button>`}</span></div>`;};
+      <span class="acts">${acts.join(" ")}</span></div>`;};
 
   const supRow=id=>{
     const s=sups[id];
@@ -277,7 +382,8 @@ function render(){
     const unpaidSum=bs.filter(b=>!b.paid).reduce((a,b)=>a+(b.amount||0),0);
     return `<tr><td>${esc(s.Name||"")}<div class="sub">${esc(s.Contact_person||"")}${s.Phone?", "+esc(s.Phone):""}</div></td>
       <td class="num">${bs.length}</td><td class="num">${fmt(sum)}</td>
-      <td class="num">${unpaidSum?fmt(unpaidSum):"0"}</td></tr>`;};
+      <td class="num">${unpaidSum?fmt(unpaidSum):"0"}</td>
+      <td><button class="btn sm" data-editsup="${id}">Правка</button> <button class="del" data-delsup="${id}">×</button></td></tr>`;};
 
   let body="";
   if(noBills){
@@ -303,8 +409,8 @@ function render(){
     </div>`;
   } else {
     body=`<div class="card"><h2>Поставщики<span class="cnt">${supOrder.length} шт</span></h2>
-      <table><tr><th>Поставщик</th><th>Счетов</th><th>Сумма</th><th>Не оплачено</th></tr>
-      ${supOrder.length?supOrder.map(supRow).join(""):`<tr><td colspan="4" class="empty-line">Поставщиков нет.</td></tr>`}</table></div>`;
+      <table><tr><th>Поставщик</th><th>Счетов</th><th>Сумма</th><th>Не оплачено</th><th></th></tr>
+      ${supOrder.length?supOrder.map(supRow).join(""):`<tr><td colspan="5" class="empty-line">Поставщиков нет.</td></tr>`}</table></div>`;
   }
 
   app.innerHTML=`
@@ -316,6 +422,8 @@ function render(){
       </div>
       <span class="spacer"></span>
       <button class="btn primary" id="btn-bill"${noBills?" disabled":""}>+ Счёт на оплату</button>
+      <button class="btn primary" id="btn-req">+ Заявка</button>
+      <button class="btn primary" id="btn-sup">+ Поставщик</button>
     </div>
     ${signals}
     ${body}
@@ -348,8 +456,18 @@ function wire(){
   document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();});
   const add=document.getElementById("btn-bill");
   if(add)add.onclick=()=>{modal="bill";uiMsg="";fv={dep:depOrder[0]};render();};
+  const addReq=document.getElementById("btn-req");
+  if(addReq)addReq.onclick=()=>{modal="req";uiMsg="";
+    fv={dep:depOrder[0],priority:"Планово",status:"Pending",ed:dayKey(new Date()),itemsList:[]};render();};
+  const addSup=document.getElementById("btn-sup");
+  if(addSup)addSup.onclick=()=>{modal="sup";uiMsg="";fv={};render();};
   document.querySelectorAll("[data-close]").forEach(el=>el.addEventListener("click",e=>{
-    if(e.target===el||el.tagName==="BUTTON"){modal=null;uiMsg="";render();}}));
+    if(e.target===el||el.tagName==="BUTTON"){
+      // «быстрое» окно поставщика было открыто поверх счёта/заявки — возвращаемся
+      // туда, а не закрываем всё: закупщик не должен терять уже введённые данные
+      if(modalReturn){modal=prevModal;fv=prevFv;prevModal=null;prevFv=null;modalReturn=null;}
+      else{modal=null;}
+      uiMsg="";render();}}));
 
   document.querySelectorAll("[data-billfor]").forEach(b=>b.onclick=()=>{
     const r=reqs.find(x=>x.id===+b.dataset.billfor);
@@ -396,13 +514,161 @@ function wire(){
   // смена заявки, поставщика или суммы сбрасывает подтверждение и обновляет предупреждение
   ["f-req","f-sup","f-amt"].forEach(id=>{
     const el=document.getElementById(id);
-    if(el)el.onchange=()=>{fv=grab();fv.force=false;render();};});
+    if(el)el.onchange=()=>{
+      if(id==="f-sup"&&el.value==="__new__"){fv=grab();openSupplierQuick({type:"bill"});return;}
+      fv=grab();fv.force=false;render();};});
   document.querySelectorAll("[data-part]").forEach(b=>b.onclick=()=>{
     fv=grab();fv.sup=b.dataset.part;fv.amt=b.dataset.sum;
     const nm=supName(+b.dataset.part);
     const req=reqs.find(r=>r.id===+fv.req);
     fv.note=`по заявке ${req?.PR_Number||fv.req}${nm?", "+nm:""}`;
     render();});
+
+  // --- заявки: быстрая смена статуса прямо в строке ---
+  document.querySelectorAll("[data-order]").forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{ await grist.docApi.applyUserActions([["UpdateRecord","Purchase_requests",+b.dataset.order,{Status:"Ordered"}]]);
+      await loadAll();render();
+    }catch(e){b.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}});
+  document.querySelectorAll("[data-received]").forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{ await grist.docApi.applyUserActions([["UpdateRecord","Purchase_requests",+b.dataset.received,{Is_received:true,Status:"Received"}]]);
+      await loadAll();render();
+    }catch(e){b.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}});
+
+  // --- заявки: создание/правка (модальное окно с позициями) ---
+  document.querySelectorAll("[data-editreq]").forEach(b=>b.onclick=()=>{
+    const r=reqs.find(x=>x.id===+b.dataset.editreq); if(!r)return;
+    const its=items.filter(i=>i.Request_ID===r.id).map(i=>
+      ({_key:itemKeySeq++,id:i.id,name:i.Item_name||"",qty:i.Quantity||0,price:i.Unit_price||0,sup:i.Supplier||0}));
+    modal="req";uiMsg="";
+    fv={id:r.id,dep:reqDep(r)||depOrder[0],by:r.Requested_by||"",priority:r.Priority||"Планово",
+        ed:r.ed||"",status:r.Status||"Pending",itemsList:its};
+    render();});
+
+  document.querySelectorAll("[data-delreq]").forEach(b=>b.onclick=()=>{
+    const r=reqs.find(x=>x.id===+b.dataset.delreq); if(!r)return;
+    const cnt=items.filter(i=>i.Request_ID===r.id).length;
+    modal="delreq";uiMsg="";
+    fv={id:r.id,label:`Удалить заявку «${r.PR_Number||r.id}»${cnt?` вместе с позициями (${cnt} шт.)`:""}?`};
+    render();});
+  const delReq=document.getElementById("f-delreq");
+  if(delReq)delReq.onclick=async()=>{
+    delReq.disabled=true;
+    try{
+      const its=items.filter(i=>i.Request_ID===fv.id).map(i=>["RemoveRecord","Purchase_Request_Items",i.id]);
+      await grist.docApi.applyUserActions([...its,["RemoveRecord","Purchase_requests",fv.id]]);
+      modal=null;await loadAll();render();
+    }catch(e){delReq.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}};
+
+  const rAdd=document.getElementById("r-additem");
+  if(rAdd)rAdd.onclick=()=>{
+    fv=grabReqForm();
+    fv.itemsList=[...(fv.itemsList||[]),{_key:itemKeySeq++,id:null,name:"",qty:1,price:0,sup:0}];
+    render();};
+  document.querySelectorAll("[data-delitemrow]").forEach(b=>b.onclick=()=>{
+    fv=grabReqForm();
+    fv.itemsList=(fv.itemsList||[]).filter(it=>String(it._key)!==String(b.dataset.delitemrow));
+    render();});
+  // поставщик прямо из строки позиции: «+ создать поставщика» открывает мини-форму
+  (fv.itemsList||[]).forEach(it=>{
+    const sel=document.getElementById("ri-sup-"+it._key);
+    if(sel)sel.onchange=()=>{
+      if(sel.value==="__new__"){fv=grabReqForm();openSupplierQuick({type:"item",key:it._key});return;}
+      fv=grabReqForm();render();};});
+
+  const saveReq=async()=>{
+    fv=grabReqForm();
+    const depId=+fv.dep||0;
+    if(!depId){uiMsg="Ошибка: выберите точку";render();return;}
+    // пустая строка (добавили «+ строка» и передумали) не должна плодить
+    // позицию-призрак: считаем валидной только строку с наименованием
+    const validItems=(fv.itemsList||[]).filter(it=>(it.name||"").trim());
+    const total=validItems.reduce((s,it)=>s+rowTotal(it),0);
+    const curReq=fv.id?reqs.find(r=>r.id===+fv.id):null;
+    const reqFields={department_ref:depId,Requested_by:(fv.by||"").trim(),
+      Priority:fv.priority||"Планово",Expected_date:epoch(fv.ed||dayKey(new Date())),
+      Status:fv.status||"Pending",Total_amount:Math.round(total*100)/100};
+    if(!curReq||!curReq.PR_Number)reqFields.PR_Number=nextPRNumber();
+    try{
+      let reqId;
+      if(fv.id){
+        await grist.docApi.applyUserActions([["UpdateRecord","Purchase_requests",+fv.id,reqFields]]);
+        reqId=+fv.id;
+      }else{
+        const res=await grist.docApi.applyUserActions([["AddRecord","Purchase_requests",null,reqFields]]);
+        reqId=res&&res.retValues?res.retValues[0]:null;
+      }
+      if(!reqId)throw new Error("не удалось определить id заявки");
+      const before=items.filter(i=>i.Request_ID===reqId);
+      const keepIds=new Set(validItems.filter(it=>it.id).map(it=>+it.id));
+      const itemActions=[];
+      before.forEach(b=>{ if(!keepIds.has(b.id))itemActions.push(["RemoveRecord","Purchase_Request_Items",b.id]); });
+      validItems.forEach(it=>{
+        const f2={Request_ID:reqId,Item_name:(it.name||"").trim(),
+          Quantity:parseFloat(it.qty)||0,Unit_price:parseFloat(it.price)||0,
+          Total_price:Math.round(rowTotal(it)*100)/100,Supplier:+it.sup||0};
+        if(it.id)itemActions.push(["UpdateRecord","Purchase_Request_Items",+it.id,f2]);
+        else itemActions.push(["AddRecord","Purchase_Request_Items",null,f2]);
+      });
+      if(itemActions.length)await grist.docApi.applyUserActions(itemActions);
+      modal=null;uiMsg="";await loadAll();render();
+    }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}};
+  const rSave=document.getElementById("r-save");
+  // блокируем сразу по клику — та же защита от дабл-клика, что и у счёта
+  if(rSave)rSave.onclick=()=>{rSave.disabled=true;saveReq();};
+
+  // --- поставщики: создание/правка/удаление ---
+  document.querySelectorAll("[data-editsup]").forEach(b=>b.onclick=()=>{
+    const s=sups[+b.dataset.editsup]; if(!s)return;
+    modal="sup";uiMsg="";
+    fv={id:+b.dataset.editsup,name:s.Name||"",contact:s.Contact_person||"",phone:s.Phone||"",address:s.Address||""};
+    render();});
+
+  const saveSup=async()=>{
+    const g=id=>document.getElementById(id);
+    const name=(g("s-name")?.value||"").trim();
+    if(!name){uiMsg="Ошибка: укажите название";render();return;}
+    const fields={Name:name,Contact_person:(g("s-contact")?.value||"").trim(),
+      Phone:(g("s-phone")?.value||"").trim(),Address:(g("s-address")?.value||"").trim()};
+    try{
+      let newId=fv.id?+fv.id:null;
+      if(fv.id){ await grist.docApi.applyUserActions([["UpdateRecord","Suppliers",+fv.id,fields]]); }
+      else{
+        const res=await grist.docApi.applyUserActions([["AddRecord","Suppliers",null,fields]]);
+        newId=res&&res.retValues?res.retValues[0]:null;
+      }
+      await loadAll();
+      if(modalReturn){
+        const ret=modalReturn; modalReturn=null;
+        fv=prevFv; modal=prevModal; prevFv=null; prevModal=null;
+        if(newId){
+          if(ret.type==="bill")fv.sup=newId;
+          else if(ret.type==="item")fv.itemsList=(fv.itemsList||[]).map(it=>it._key===ret.key?{...it,sup:newId}:it);
+        }
+      }else{ modal=null; }
+      uiMsg="";render();
+    }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}};
+  const sSave=document.getElementById("s-save");
+  if(sSave)sSave.onclick=()=>{sSave.disabled=true;saveSup();};
+
+  document.querySelectorAll("[data-delsup]").forEach(b=>b.onclick=()=>{
+    const id=+b.dataset.delsup; const s=sups[id]; if(!s)return;
+    const usedBill=bills.some(x=>x.supplier===id);
+    const usedItem=items.some(i=>i.Supplier===id);
+    modal="delsup";uiMsg="";
+    if(usedBill||usedItem){
+      fv={id,blocked:true,reason:`Нельзя удалить: поставщик используется в ${usedBill?"счетах":""}${usedBill&&usedItem?" и ":""}${usedItem?"позициях заявок":""}.`};
+    }else{
+      fv={id,blocked:false,label:`Удалить поставщика «${s.Name||""}»?`};
+    }
+    render();});
+  const delSup=document.getElementById("f-delsup");
+  if(delSup)delSup.onclick=async()=>{
+    delSup.disabled=true;
+    try{ await grist.docApi.applyUserActions([["RemoveRecord","Suppliers",fv.id]]);
+      modal=null;await loadAll();render();
+    }catch(e){delSup.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}};
 
   const save=async ready=>{
     const force=fv.force;
@@ -454,7 +720,10 @@ function wire(){
 }
 
 document.addEventListener("keydown",e=>{
-  if(e.key==="Escape"&&modal){modal=null;uiMsg="";render();}});
+  if(e.key==="Escape"&&modal){
+    if(modalReturn){modal=prevModal;fv=prevFv;prevModal=null;prevFv=null;modalReturn=null;}
+    else{modal=null;}
+    uiMsg="";render();}});
 
 grist.ready({requiredAccess:"full"});
 grist.onRecords(async()=>{
