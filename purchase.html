@@ -403,7 +403,10 @@ function render(){
     const bs=bills.filter(b=>b.supplier===id);
     const sum=bs.reduce((a,b)=>a+(b.amount||0),0);
     const unpaidSum=bs.filter(b=>!b.paid).reduce((a,b)=>a+(b.amount||0),0);
-    return `<tr><td>${esc(s.Name||"")}<div class="sub">${esc(s.Contact_person||"")}${s.Phone?", "+esc(s.Phone):""}</div></td>
+    const req=[s.bin&&"БИН "+s.bin,s.bank_name,s.bank_bik&&"БИК "+s.bank_bik,s.bank_account]
+      .filter(Boolean).join(", ");
+    return `<tr><td>${esc(s.Name||"")}<div class="sub">${esc(s.Contact_person||"")}${s.Phone?", "+esc(s.Phone):""}</div>
+      ${req?`<div class="sub">${esc(req)}</div>`:`<div class="sub" style="color:var(--warn)">реквизиты не заполнены</div>`}</td>
       <td class="num">${bs.length}</td><td class="num">${fmt(sum)}</td>
       <td class="num">${unpaidSum?fmt(unpaidSum):"0"}</td>
       <td><button class="btn sm" data-editsup="${id}">Правка</button> <button class="del" data-delsup="${id}">×</button></td></tr>`;};
@@ -662,7 +665,9 @@ function wire(){
   document.querySelectorAll("[data-editsup]").forEach(b=>b.onclick=()=>{
     const s=sups[+b.dataset.editsup]; if(!s)return;
     modal="sup";uiMsg="";
-    fv={id:+b.dataset.editsup,name:s.Name||"",contact:s.Contact_person||"",phone:s.Phone||"",address:s.Address||""};
+    fv={id:s.id,name:s.Name,contact:s.Contact_person,phone:s.Phone,address:s.Address,
+        bin:s.bin,email:s.email,bank_name:s.bank_name,bank_bik:s.bank_bik,
+        bank_account:s.bank_account,note:s.note};
     render();});
 
   const saveSup=async()=>{
@@ -670,7 +675,10 @@ function wire(){
     const name=(g("s-name")?.value||"").trim();
     if(!name){uiMsg="Ошибка: укажите название";render();return;}
     const fields={Name:name,Contact_person:(g("s-contact")?.value||"").trim(),
-      Phone:(g("s-phone")?.value||"").trim(),Address:(g("s-address")?.value||"").trim()};
+      Phone:(g("s-phone")?.value||"").trim(),Address:(g("s-address")?.value||"").trim(),
+      bin:(g("s-bin")?.value||"").trim(),email:(g("s-email")?.value||"").trim(),
+      bank_name:(g("s-bank")?.value||"").trim(),bank_bik:(g("s-bik")?.value||"").trim(),
+      bank_account:(g("s-acc")?.value||"").trim(),note:(g("s-note")?.value||"").trim()};
     try{
       let newId=fv.id?+fv.id:null;
       if(fv.id){ await grist.docApi.applyUserActions([["UpdateRecord","Suppliers",+fv.id,fields]]); }

@@ -698,6 +698,21 @@ async function main() {
   markupSane(h, "отчёт о прибылях");
   S("tab", "money");
 
+  // ---- 22. реквизиты поставщика видны казначею при оплате ----
+  resetBackend();
+  store.PayQueue = { id: [61], bill_key: ["B61-x"], date_added: [T0], department: [1],
+    supplier: ["ТОО Ромашка"], amount: [5000], invoice_link: [""], request_no: ["PR-1"],
+    category: [1], paid: [false], paid_date: [null], paid_account: [0], expense_created: [false],
+    requisites: ["БИН 123456789012, Kaspi Bank, БИК CASPKZKA, счёт KZ123"] };
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000 })]);
+  h = await render();
+  check("реквизиты поставщика показаны в очереди", h.includes("KZ123") && h.includes("БИК"));
+  store.PayQueue.requisites = [""];
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000 })]);
+  h = await render();
+  check("без реквизитов есть предупреждение", h.includes("реквизиты поставщика не заполнены"));
+  markupSane(h, "реквизиты в очереди оплаты");
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");
