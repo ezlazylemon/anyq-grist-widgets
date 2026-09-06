@@ -71,8 +71,10 @@
   .lg .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .lg .vv{font-weight:600} .lg .pp{color:var(--muted); width:38px; text-align:right}
 
-  .rows{display:flex; flex-direction:column; gap:4px; max-height:330px; overflow:auto}
-  .row{display:grid; grid-template-columns:minmax(84px,34%) 1fr auto; gap:9px; align-items:center; padding:1px 0}
+  .rows{display:flex; flex-direction:column; gap:4px}
+  .row{display:grid; grid-template-columns:minmax(84px,34%) 1fr auto 44px; gap:9px; align-items:center; padding:1px 0}
+  .pdelta{font-size:11px; font-weight:600; text-align:right}
+  .pdelta.up{color:var(--up)} .pdelta.down{color:var(--down)}
   .row .name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .row .track{height:7px; border-radius:3px; background:var(--line); overflow:hidden}
   .row .track i{display:block; height:100%; background:var(--accent)}
@@ -97,7 +99,23 @@
   tr:last-child td{border-bottom:0}
   td.pos{color:var(--up); font-weight:600} td.neg{color:var(--down); font-weight:600}
 
+  .signals{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
+  .chip{border:1px solid var(--line); background:var(--card); color:var(--muted);
+    border-radius:20px; padding:5px 12px; font-size:12px}
+  .chip.alert{border-color:var(--down); background:var(--down-bg); color:var(--down); font-weight:600}
+  .pills.tabs .pill.on{background:var(--ink); color:var(--card)}
+  .li.exp{cursor:pointer} .li.exp:hover{background:var(--hover)}
   .list{display:flex; flex-direction:column; max-height:280px; overflow:auto}
+  .list.tall{max-height:420px}
+  /* массовая инкассация */
+  .bulk{max-height:50vh; overflow:auto; margin-top:6px}
+  .brow{display:grid; grid-template-columns:1fr 92px 104px 84px; gap:8px; align-items:center; padding:4px 0; border-top:1px solid var(--line)}
+  .brow:first-child{border-top:0}
+  .brow .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .brow input{padding:4px 7px}
+  .brow .df{font-size:12px; text-align:right}
+  .brow .df.up{color:var(--up)} .brow .df.down{color:var(--down)}
+  .modal.wide{max-width:620px}
   .li{display:flex; gap:9px; align-items:baseline; padding:6px 2px; border-top:1px solid var(--line)}
   .li:first-child{border-top:0}
   .li .d{color:var(--muted); font-size:12px; flex:none; width:42px}
@@ -170,6 +188,7 @@ let expenses=[],bills=[],cashrec=[];
 let period="today",cFrom="",cTo="";
 let sel=new Set(), selInit=false;   // выбранные точки; по умолчанию — все, галочки стоят
 let openDD=false, modal=null, uiMsg="", fv={};
+let tab="money", expQuery="";       // вкладка (money | an) и поиск по расходам
 
 const depId=v=>typeof v==="number"?v:(Array.isArray(v)?(+v[v.length-1]||0):(nameToId[String(v)]||0));
 const depName=id=>deps[id]?.name||("#"+id);
@@ -258,6 +277,16 @@ function expectedCash(dk,dep){
 function modalHtml(){
   if(!modal)return"";
   const todayK=dayKey(new Date());
+  if(modal==="delexp"){
+    return `<div class="mback" data-close><div class="modal">
+      <h3>Удалить расход<button class="x" data-close aria-label="Закрыть">×</button></h3>
+      <div class="form">
+        <div class="hint widef">${esc(fv.label||"")}</div>
+        <div class="widef"><button class="btn primary" id="f-delexp">Удалить</button>
+          <button class="btn" data-close>Отмена</button>
+          <span class="msg err">${esc(uiMsg)}</span></div>
+      </div></div></div>`;
+  }
   if(modal==="delcr"){
     return `<div class="mback" data-close><div class="modal">
       <h3>Удалить запись сдачи<button class="x" data-close aria-label="Закрыть">×</button></h3>
@@ -270,7 +299,7 @@ function modalHtml(){
   }
   if(modal==="exp"){
     return `<div class="mback" data-close><div class="modal">
-      <h3>Новый расход<button class="x" data-close aria-label="Закрыть">×</button></h3>
+      <h3>${fv.id?"Правка расхода":"Новый расход"}<button class="x" data-close aria-label="Закрыть">×</button></h3>
       <div class="form">
         <label>Дата<input type="date" id="f-date" value="${fv.date||todayK}"></label>
         <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${(fv.dep?+fv.dep===id:(sel.size===1&&sel.has(id)))?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
@@ -279,11 +308,38 @@ function modalHtml(){
         <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${fv.amt||""}" placeholder="0"></label>
         <label>Поставщик<input type="text" id="f-sup" value="${esc(fv.sup||"")}" placeholder="необязательно"></label>
         <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note||"")}" placeholder="за что"></label>
-        <div class="widef"><button class="btn primary" id="f-add">Записать расход</button>
+        <div class="widef"><button class="btn primary" id="f-add">${fv.id?"Сохранить":"Записать расход"}</button>
           <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
       </div></div></div>`;
   }
-  // сдача наличных
+  if(modal==="bulk"){
+    const dk=fv.date||addDays(todayK,-1);
+    const rows=depOrder.filter(inSel).map(id=>{
+      const expd=expectedCash(dk,id);
+      const ex=cashrec.find(r=>r.dk===dk&&r.department===id);
+      return {id,expd,ex};}).filter(r=>r.expd>0||r.ex);
+    const list=rows.map(r=>{
+      const val=(fv.vals&&fv.vals[r.id]!==undefined)?fv.vals[r.id]:(r.ex?r.ex.cash_actual:"");
+      const a=parseFloat(val);
+      const d=isNaN(a)?null:Math.round((a-r.expd)*100)/100;
+      return `<div class="brow"><span class="nm" title="${esc(depName(r.id))}">${esc(shortName(r.id))}</span>
+        <span class="num" style="text-align:right">${fmt(r.expd)}</span>
+        <input type="number" step="1" min="0" data-bulk="${r.id}" value="${val}" placeholder="факт">
+        <span class="df ${d===null?"":d>0?"up":d<0?"down":""}">${d===null?"":d===0?"ровно":(d>0?"+":"−")+fmt(Math.abs(d))}</span></div>`;}).join("")
+      ||`<div class="empty-line">За этот день наличной выручки не было.</div>`;
+    return `<div class="mback" data-close><div class="modal wide">
+      <h3>Инкассация за день<button class="x" data-close aria-label="Закрыть">×</button></h3>
+      <div class="form">
+        <label class="widef">День<input type="date" id="f-date" value="${dk}"></label>
+        <div class="widef" style="display:grid;grid-template-columns:1fr 92px 104px 84px;gap:8px;font-size:11px;color:var(--muted)">
+          <span>Точка</span><span style="text-align:right">Ожидается</span><span>Сдано</span><span style="text-align:right">Разница</span></div>
+        <div class="bulk widef">${list}</div>
+        <div class="widef"><button class="btn primary" id="f-bulk">Сохранить все</button>
+          <button class="btn" data-close>Отмена</button>
+          <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
+      </div></div></div>`;
+  }
+  // сдача одной точки
   const dk=fv.date||addDays(todayK,-1);
   const dep=+(fv.dep||((sel.size===1&&[...sel][0])||depOrder[0]));
   const hint=cashHint(dk,dep,fv.amt);
@@ -314,11 +370,20 @@ function render(){
 
   const len=Math.round((new Date(to)-new Date(from))/864e5)+1;
   const pFrom=addDays(from,-len),pTo=addDays(from,-1);
-  const prev=chanSums(recs.filter(r=>{const k=dstr(r.date);return k>=pFrom&&k<=pTo&&inSel(depId(r.department));}));
-  let dHtml='<span class="d mut">&nbsp;</span>';
-  if(prev.total>0&&period!=="all"){
+  const prevRows=recs.filter(r=>{const k=dstr(r.date);return k>=pFrom&&k<=pTo&&inSel(depId(r.department));});
+  const prev=chanSums(prevRows);
+  // дельту не показываем, если период включает сегодня (день не закончен)
+  // или в прошлом периоде нет данных за столько же дней
+  const openDay=to>=todayK;
+  const prevDays=new Set(prevRows.map(r=>dstr(r.date))).size;
+  const lastSync=recs.map(r=>r.last_sync_upper||"").filter(Boolean).sort().pop()||"";
+  const syncTime=lastSync?lastSync.slice(11,16):"";
+  let dHtml=`<span class="d mut">&nbsp;</span>`;
+  if(openDay) dHtml=`<span class="d mut">день не закончен${syncTime?", данные до "+syncTime:""}</span>`;
+  else if(period!=="all"&&prev.total>0&&prevDays>=len){
     const d=(cur.total-prev.total)/prev.total*100;
-    dHtml=`<span class="d ${d>=0?"up":"down"}">${d>=0?"+":"−"}${Math.abs(d).toFixed(1)}% к пред. периоду</span>`;}
+    dHtml=`<span class="d ${d>=0?"up":"down"}">${d>=0?"+":"−"}${Math.abs(d).toFixed(1)}% к ${RU_DD(pFrom)}${len>1?"-"+RU_DD(pTo):""}</span>`;}
+  else if(period!=="all") dHtml=`<span class="d mut">не с чем сравнить</span>`;
 
   const pills=PERIODS.map(([k,n])=>`<button class="pill${period===k?" on":""}" data-p="${k}">${n}</button>`).join("");
   const custom=period==="custom"?`<span class="range">с
@@ -329,18 +394,46 @@ function render(){
     :sel.size===1?depName([...sel][0]):`Точки: ${sel.size} из ${depOrder.length}`;
   const menu=`<div class="menu">
     <input type="search" id="depsearch" placeholder="Поиск точки" style="width:100%;margin-bottom:6px">
-    <div class="tools"><button data-selall>Выбрать все</button><button data-selnone>Сбросить</button></div>`+
+    <div class="tools"><button data-selall>Выбрать все</button><button data-selnone>Сбросить</button></div>
+    <div class="tools">`+[...new Set(depOrder.map(id=>deps[id]?.city).filter(Boolean))]
+      .map(c=>`<button data-city="${esc(c)}">${esc(c)}</button>`).join("")+`</div>`+
     depOrder.map(id=>`<label data-nm="${esc(depName(id).toLowerCase())}"><input type="checkbox" data-dep="${id}"${sel.has(id)?" checked":""}>${esc(depName(id))}</label>`).join("")+`</div>`;
 
+  // сданная наличность за период: уходит из кассы точки
+  const handedSum=cashrec.filter(r=>r.dk>=from&&r.dk<=to&&inSel(r.department))
+    .reduce((s,r)=>s+(r.cash_actual||0),0);
+  const accCalc=id=>{
+    const a=accs[id];if(!a)return null;
+    const chans=(a.revenue_cols||"").split(",").map(s=>s.trim()).filter(Boolean);
+    let inflow=0,viaAgg=0;
+    for(const r of rvRows)for(const c of chans){
+      inflow+=r[c]||0; if(DELIV.includes(c))viaAgg+=r[c]||0;}
+    let out=exp.filter(e=>e.account===id).reduce((s,e)=>s+(e.amount||0),0);
+    let note="";
+    if(a.name==="Касса точки"&&handedSum){out+=handedSum;note=`в т.ч. сдано ${fmt(handedSum)}`;}
+    if(viaAgg)note=(note?note+", ":"")+`агрегаторы ${fmt(viaAgg)} придут позже`;
+    return {name:a.name,inflow,out,net:inflow-out,note};};
+  const cfCalc=accOrder.map(accCalc).filter(x=>x&&(x.inflow||x.out));
+  const cfNet=cfCalc.reduce((s,x)=>s+x.net,0);
+  const cfRows=cfCalc.map(x=>`<tr><td>${esc(x.name)}${x.note?`<div class="sub">${esc(x.note)}</div>`:""}</td>
+      <td class="num">${fmt(x.inflow)}</td><td class="num">${x.out?"−"+fmt(x.out):"0"}</td>
+      <td class="num ${x.net>=0?"pos":"neg"}">${fmt(x.net)}</td></tr>`).join("")
+    ||`<tr><td colspan="4" class="empty-line" style="text-align:left">Нет движения за период.</td></tr>`;
+
   const cover=expSum>0?cur.total/expSum*100:null;
+  const lastExp=expenses.length?expenses[0].dk:"";
+  // «чистый доход» честен только когда расходы за период вообще вносили
+  const netKnown=exp.length>0;
   const kpis=`<div class="kpis">
     <div class="kpi"><div class="t">Выручка</div><div class="v num">${fmt(cur.total)} ₸</div>${dHtml}</div>
-    <div class="kpi"><div class="t">Расходы</div><div class="v num">${fmt(expSum)} ₸</div><span class="d mut">${exp.length} операций</span></div>
-    <div class="kpi"><div class="t">Чистый доход</div><div class="v num ${net>=0?"pos":"neg"}">${fmt(net)} ₸</div>
-      ${net>=0?`<span class="d up">в плюсе</span>`:`<span class="d down">до нуля не хватает ${fmt(-net)} ₸</span>`}</div>
-    <div class="kpi"><div class="t">Ноль (порог выручки)</div><div class="v num">${fmt(expSum)} ₸</div>
-      ${cover===null?`<span class="d mut">расходов нет</span>`
-        :`<span class="d ${cover>=100?"up":"down"}">покрыто на ${cover.toFixed(0)}%</span>`}</div>
+    <div class="kpi"><div class="t">Расходы</div><div class="v num">${fmt(expSum)} ₸</div>
+      <span class="d mut">${exp.length} ${plural(exp.length,"запись","записи","записей")}${cover!==null?`, покрытие ${cover.toFixed(0)}%`:""}</span></div>
+    <div class="kpi"><div class="t">Чистый доход</div>
+      <div class="v num ${netKnown?(net>=0?"pos":"neg"):""}"${netKnown?"":' style="color:var(--muted)"'}>${fmt(net)} ₸</div>
+      ${netKnown?(net>=0?`<span class="d up">в плюсе</span>`:`<span class="d down">до нуля не хватает ${fmt(-net)} ₸</span>`)
+        :`<span class="d down">расходы не внесены${lastExp?", последний "+RU_DD(lastExp):""}</span>`}</div>
+    <div class="kpi"><div class="t">Оборот по счетам</div><div class="v num">${fmt(cfNet)} ₸</div>
+      <span class="d mut">приход минус расход</span></div>
   </div>`;
 
   const chParts=CH.filter(c=>cur[c.k]>0).map(c=>({v:cur[c.k],c:c.c,label:c.n}));
@@ -349,14 +442,20 @@ function render(){
   const catParts=Object.entries(byCat).sort((a,b)=>b[1]-a[1])
     .map(([id,v],i)=>({v,c:CATC[i%CATC.length],label:cats[id]?.name||"—"}));
 
-  const byDep={};
+  const byDep={},byDepPrev={};
   rvRows.forEach(r=>{const id=depId(r.department);byDep[id]=(byDep[id]||0)+(r.total||0);});
-  const pts=depOrder.filter(inSel).map(id=>({id,v:byDep[id]||0})).sort((a,b)=>b.v-a.v);
+  prevRows.forEach(r=>{const id=depId(r.department);byDepPrev[id]=(byDepPrev[id]||0)+(r.total||0);});
+  const pts=depOrder.filter(inSel).map(id=>({id,v:byDep[id]||0,p:byDepPrev[id]||0})).sort((a,b)=>b.v-a.v);
   const maxV=pts[0]?.v||1;
-  const ptRows=pts.map(p=>`<div class="row${p.v===0?" zero":""}">
+  const showDelta=!openDay&&period!=="all"&&prevDays>=len;
+  const ptRows=pts.map(p=>{
+    let dl="";
+    if(showDelta&&p.p>0){const d=(p.v-p.p)/p.p*100;
+      dl=`<span class="pdelta ${d>=0?"up":"down"}">${d>=0?"+":"−"}${Math.abs(d).toFixed(0)}%</span>`;}
+    return `<div class="row${p.v===0?" zero":""}">
     <span class="name" title="${esc(depName(p.id))}">${esc(shortName(p.id))}</span>
     <span class="track"><i style="width:${(p.v/maxV*100).toFixed(1)}%"></i></span>
-    <span class="val num">${p.v===0?"0":fmt(p.v)}</span></div>`).join("")
+    <span class="val num">${p.v===0?"0":fmt(p.v)}</span>${dl||`<span class="pdelta"></span>`}</div>`;}).join("")
     ||`<div class="empty-line">Нет данных за период.</div>`;
 
   // график всегда показывает контекст последних дней; выбранный период подсвечен
@@ -372,19 +471,6 @@ function render(){
     return `<div class="cb${cls}" data-tip="${RU_D(k)}: ${fmt(v)} ₸">
       <i style="height:${h}px"></i><span class="lbl">${+k.slice(8)}</span></div>`;}).join("");
 
-  const accRow=id=>{
-    const a=accs[id];if(!a)return"";
-    const chans=(a.revenue_cols||"").split(",").map(s=>s.trim()).filter(Boolean);
-    let inflow=0;
-    for(const r of rvRows)for(const c of chans)inflow+=r[c]||0;
-    const out=exp.filter(e=>e.account===id).reduce((s,e)=>s+(e.amount||0),0);
-    if(!inflow&&!out)return"";
-    const n=inflow-out;
-    return `<tr><td>${esc(a.name)}</td><td class="num">${fmt(inflow)}</td>
-      <td class="num">${out?"−"+fmt(out):"0"}</td>
-      <td class="num ${n>=0?"pos":"neg"}">${fmt(n)}</td></tr>`;};
-  const cfRows=accOrder.map(accRow).filter(Boolean).join("")
-    ||`<tr><td colspan="4" class="empty-line" style="text-align:left">Нет движения за период.</td></tr>`;
 
   // сверка касс: записи за период (по дате сдачи) + бейдж
   // сдачи не привязаны к выбранному периоду: их вносят за прошлые дни
@@ -437,41 +523,68 @@ function render(){
     <span class="payrow">${accSel(r.id)}<button class="btn primary" data-pay="${r.id}">Оплачено</button></span></div>`).join("")
     ||`<div class="empty-line">Неоплаченных счетов нет.</div>`;
 
-  const expList=exp.slice(0,30).map(r=>`<div class="li">
-    <span class="d num">${RU_DD(r.dk)}</span>
-    <span class="t"><b>${esc(cats[r.category]?.name||"—")}</b>
-      <div class="sub">${esc(shortName(r.department))}${r.supplier?", "+esc(r.supplier):""}${r.note?", "+esc(r.note):""}</div></span>
-    <span class="a num">−${fmt(r.amount||0)}</span></div>`).join("")
-    ||`<div class="empty-line">Расходов за период нет.</div>`;
+  // лента расходов: поиск, группировка по дням, клик по строке правит
+  const q=(expQuery||"").trim().toLowerCase();
+  const expShown=(q?exp.filter(r=>[cats[r.category]?.name,depName(r.department),r.supplier,r.note]
+      .filter(Boolean).join(" ").toLowerCase().includes(q)):exp).slice(0,60);
+  let lastDay="";
+  const expList=expShown.map(r=>{
+    const head=r.dk!==lastDay?(lastDay=r.dk,`<div class="nhday">${RU_D(r.dk)}</div>`):"";
+    return head+`<div class="li exp" data-editexp="${r.id}">
+      <span class="t"><b>${esc(cats[r.category]?.name||"—")}</b>
+        <div class="sub">${esc(shortName(r.department))}${r.supplier?", "+esc(r.supplier):""}${r.note?", "+esc(r.note):""}${accs[r.account]?", "+esc(accs[r.account].name):""}</div></span>
+      <span class="a num">−${fmt(r.amount||0)}</span>
+      <button class="del" data-delexp="${r.id}" title="Удалить">×</button></div>`;}).join("")
+    ||`<div class="empty-line">${q?"Ничего не найдено.":"Расходов за период нет."}</div>`;
+
+  // строка сигналов: что требует действия прямо сейчас
+  const zeroPts=pts.filter(p=>p.v===0).length;
+  const chip=(on,txt,target)=>`<button class="chip${on?" alert":""}" data-goto="${target}">${txt}</button>`;
+  const signals=`<div class="signals">
+    ${chip(debtDays.length>0,`Касса не сдана: ${debtDays.length?fmt(debtSum)+" ₸":"нет"}`,"c-cash")}
+    ${chip(unpaid.length>0,`Счета к оплате: ${unpaid.length?unpaid.length+" на "+fmt(unpaid.reduce((a,r)=>a+(r.amount||0),0))+" ₸":"нет"}`,"c-bills")}
+    ${chip(zeroPts>0,`Точки без продаж: ${zeroPts||"нет"}`,"c-points")}
+    ${chip(false,`Синк iiko: ${syncTime||"нет данных"}`,"c-chart")}
+  </div>`;
+
+  const cardPoints=`<div class="card" id="c-points"><h2>Точки <span class="sub">выручка за период${showDelta?", справа к прошлому":""}</span><span class="cnt">${pts.filter(p=>p.v>0).length} из ${pts.length} с продажами</span></h2>
+        <div class="rows">${ptRows}</div></div>`;
+  const cardCash=`<div class="card" id="c-cash"><h2>Сверка касс <span class="sub">последние сдачи</span><span class="cnt">${crAll.length?`всего ${crAll.length}`:""}</span></h2>
+        <div class="list">${crList}</div>${nhLine}</div>`;
+  const cardBills=`<div class="card" id="c-bills"><h2>Счета к оплате<span class="cnt">${unpaid.length} шт, ${fmt(unpaid.reduce((a,r)=>a+(r.amount||0),0))} ₸</span></h2>
+        <div class="list">${billList}</div></div>`;
+  const cardExp=`<div class="card wide" id="c-exp"><h2>Расходы <span class="sub">за период</span>
+        <input type="search" id="expsearch" placeholder="Поиск" value="${esc(expQuery||"")}" style="margin-left:auto;max-width:180px">
+        <span class="cnt">${exp.length} шт, −${fmt(expSum)} ₸</span></h2>
+        <div class="list tall">${expList}</div></div>`;
+  const cardChart=`<div class="card" id="c-chart"><h2>Динамика по дням <span class="sub">₸, красный столбец: сегодня</span></h2>
+        <div class="chart">${chart}</div></div>`;
+  const cardCF=`<div class="card"><h2>Движение по счетам <span class="sub">оборот за период, не остаток</span></h2>
+        <table><tr><th>Счёт</th><th>Приход</th><th>Расход</th><th>Оборот</th></tr>${cfRows}</table></div>`;
+  const cardDonutRev=`<div class="card"><h2>Выручка по каналам <span class="cnt">${from===to?RU_D(from):RU_DD(from)+"-"+RU_DD(to)}</span></h2>
+        ${chParts.length?`<div class="split">${donut(chParts,150)}${legend(chParts)}</div>`:`<div class="empty-line">Продаж нет.</div>`}</div>`;
+  const cardDonutExp=`<div class="card"><h2>Расходы по статьям <span class="cnt">−${fmt(expSum)} ₸</span></h2>
+        ${catParts.length?`<div class="split">${donut(catParts,150)}${legend(catParts)}</div>`:`<div class="empty-line">Расходов за период нет.</div>`}</div>`;
+
+  const body=tab==="money"
+    ? `<div class="grid">${cardPoints}${cardCash}${cardBills}${cardExp}</div>`
+    : `<div class="grid">${cardChart}${cardCF}${cardDonutRev}${cardDonutExp}</div>`;
 
   app.innerHTML=`
     <div class="toolbar">
+      <div class="pills tabs">
+        <button class="pill${tab==="money"?" on":""}" data-tab="money">Касса</button>
+        <button class="pill${tab==="an"?" on":""}" data-tab="an">Аналитика</button>
+      </div>
       <div class="pills">${pills}</div>${custom}
       <details class="dd" id="depdd"${openDD?" open":""}><summary>${esc(depLabel)}</summary>${menu}</details>
       <span class="spacer"></span>
       <button class="btn primary" id="btn-exp">+ Расход</button>
-      <button class="btn ghost" id="btn-cash">Сдача наличных</button>
-      <button class="btn" id="btn-refresh" title="Перечитать данные">⟳</button>
+      <button class="btn ghost" id="btn-cash">Инкассация</button>
     </div>
+    ${signals}
     ${kpis}
-    <div class="grid">
-      <div class="card"><h2>Выручка по каналам <span class="cnt">${from===to?RU_D(from):RU_DD(from)+"-"+RU_DD(to)}</span></h2>
-        ${chParts.length?`<div class="split">${donut(chParts,150)}${legend(chParts)}</div>`:`<div class="empty-line">Продаж нет.</div>`}</div>
-      <div class="card"><h2>Расходы по статьям <span class="cnt">−${fmt(expSum)} ₸</span></h2>
-        ${catParts.length?`<div class="split">${donut(catParts,150)}${legend(catParts)}</div>`:`<div class="empty-line">Расходов за период нет.</div>`}</div>
-      <div class="card"><h2>Точки <span class="sub">выручка за период</span><span class="cnt">${pts.filter(p=>p.v>0).length} из ${pts.length} с продажами</span></h2>
-        <div class="rows">${ptRows}</div></div>
-      <div class="card"><h2>Динамика по дням <span class="sub">₸, красный столбец: сегодня</span></h2>
-        <div class="chart">${chart}</div></div>
-      <div class="card"><h2>Сверка касс <span class="sub">последние сдачи</span><span class="cnt">${crAll.length?`всего ${crAll.length}`:""}</span></h2>
-        <div class="list">${crList}</div>${nhLine}</div>
-      <div class="card"><h2>Cashflow по счетам <span class="sub">за период</span></h2>
-        <table><tr><th>Счёт</th><th>Приход</th><th>Расход</th><th>Нетто</th></tr>${cfRows}</table></div>
-      <div class="card"><h2>Счета к оплате<span class="cnt">${unpaid.length} шт · ${fmt(unpaid.reduce((a,r)=>a+(r.amount||0),0))} ₸</span></h2>
-        <div class="list">${billList}</div></div>
-      <div class="card"><h2>Расходы <span class="sub">за период, новые сверху</span><span class="cnt">${exp.length} шт · −${fmt(expSum)} ₸</span></h2>
-        <div class="list">${expList}</div></div>
-    </div>
+    ${body}
     ${modalHtml()}`;
   wire();
 }
@@ -481,6 +594,7 @@ const grabForm=()=>{const g=id=>document.getElementById(id);
           acc:g("f-acc")?.value,amt:g("f-amt")?.value,sup:g("f-sup")?.value,note:g("f-note")?.value};};
 
 function wire(){
+ try{
   document.querySelectorAll(".pill").forEach(b=>b.onclick=()=>{period=b.dataset.p;uiMsg="";render();});
   const cf=document.getElementById("c-from"),ct=document.getElementById("c-to");
   if(cf)cf.onchange=e=>{cFrom=e.target.value;render();};
@@ -501,8 +615,11 @@ function wire(){
   dd.querySelectorAll("[data-dep]").forEach(cb=>cb.onchange=()=>{
     const id=+cb.dataset.dep;cb.checked?sel.add(id):sel.delete(id);
     rerenderKeepDD();});
-  dd.querySelector("[data-selall]").onclick=()=>{sel=new Set(depOrder);rerenderKeepDD();};
-  dd.querySelector("[data-selnone]").onclick=()=>{sel.clear();rerenderKeepDD();};
+  const on=(sel_,fn)=>{const el=dd.querySelector(sel_); if(el)el.onclick=fn;};
+  on("[data-selall]",()=>{sel=new Set(depOrder);rerenderKeepDD();});
+  on("[data-selnone]",()=>{sel.clear();rerenderKeepDD();});
+  dd.querySelectorAll("[data-city]").forEach(b=>b.onclick=()=>{
+    sel=new Set(depOrder.filter(id=>deps[id]?.city===b.dataset.city));rerenderKeepDD();});
   const ds=document.getElementById("depsearch");
   if(ds)ds.oninput=()=>{
     const q=ds.value.trim().toLowerCase();
@@ -510,7 +627,17 @@ function wire(){
       l.style.display=!q||l.dataset.nm.includes(q)?"":"none";});};
   document.getElementById("btn-refresh").onclick=async()=>{await loadAll();render();};
   document.getElementById("btn-exp").onclick=()=>{modal="exp";fv={};uiMsg="";render();};
-  document.getElementById("btn-cash").onclick=()=>{modal="cash";fv={};uiMsg="";render();};
+  document.getElementById("btn-cash").onclick=()=>{modal="bulk";fv={vals:{}};uiMsg="";render();};
+  document.querySelectorAll(".pills.tabs .pill").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();});
+  document.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>{
+    if(tab!=="money"&&["c-chart"].includes(b.dataset.goto)===false){tab="money";render();}
+    else if(b.dataset.goto==="c-chart"&&tab!=="an"){tab="an";render();}
+    setTimeout(()=>document.getElementById(b.dataset.goto)?.scrollIntoView({behavior:"smooth",block:"start"}),30);});
+  const es=document.getElementById("expsearch");
+  if(es)es.oninput=()=>{expQuery=es.value;
+    const pos=es.selectionStart;render();
+    const e2=document.getElementById("expsearch");
+    if(e2){e2.focus();e2.setSelectionRange(pos,pos);}};
 
   // модалка: закрытие по фону/крестику, живой пересчёт подсказки сдачи
   document.querySelectorAll("[data-close]").forEach(el=>el.addEventListener("click",e=>{
@@ -551,14 +678,65 @@ function wire(){
       addBtn.disabled=true;
       try{
         const dk=fv.date||dayKey(new Date());
-        await grist.docApi.applyUserActions([["AddRecord","Expenses",null,{
-          date:epoch(dk),department:+fv.dep,category:+fv.cat,amount:amt,
-          account:+fv.acc,period:dk.slice(0,7),source:"казначей",
-          supplier:(fv.sup||"").trim(),note:(fv.note||"").trim(),created_by:"дашборд"}]]);
+        const flds={date:epoch(dk),department:+fv.dep,category:+fv.cat,amount:amt,
+          account:+fv.acc,period:dk.slice(0,7),
+          supplier:(fv.sup||"").trim(),note:(fv.note||"").trim()};
+        await grist.docApi.applyUserActions([ fv.id
+          ? ["UpdateRecord","Expenses",fv.id,flds]
+          : ["AddRecord","Expenses",null,{...flds,source:"казначей",created_by:"дашборд"}] ]);
         modal=null;uiMsg="";await loadAll();render();
       }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}
     };
   }
+  if(modal==="bulk"){
+    const df=document.getElementById("f-date");
+    if(df)df.onchange=()=>{fv={date:df.value,vals:{}};render();};
+    document.querySelectorAll("[data-bulk]").forEach(inp=>inp.oninput=()=>{
+      fv.vals=fv.vals||{};fv.vals[+inp.dataset.bulk]=inp.value;
+      const row=inp.closest(".brow"),cell=row.querySelector(".df");
+      const expd=expectedCash(fv.date||addDays(dayKey(new Date()),-1),+inp.dataset.bulk);
+      const a=parseFloat(inp.value);
+      if(isNaN(a)){cell.textContent="";cell.className="df";}
+      else{const d=Math.round((a-expd)*100)/100;
+        cell.textContent=d===0?"ровно":(d>0?"+":"−")+fmt(Math.abs(d));
+        cell.className="df "+(d>0?"up":d<0?"down":"");}});
+    const bulkBtn=document.getElementById("f-bulk");
+    if(bulkBtn)bulkBtn.onclick=async()=>{
+      const dk=(document.getElementById("f-date")||{}).value||addDays(dayKey(new Date()),-1);
+      const acts=[];
+      document.querySelectorAll("[data-bulk]").forEach(inp=>{
+        const v=parseFloat(inp.value); if(isNaN(v)||v<0)return;
+        const dep=+inp.dataset.bulk;
+        const ex=cashrec.find(r=>r.dk===dk&&r.department===dep);
+        const flds={date:epoch(dk),department:dep,cash_actual:v,submitted_by:"дашборд"};
+        if(ex){ if((ex.cash_actual||0)!==v) acts.push(["UpdateRecord","CashReconciliation",ex.id,flds]); }
+        else acts.push(["AddRecord","CashReconciliation",null,flds]);});
+      if(!acts.length){uiMsg="Ошибка: не заполнено ни одной суммы";render();return;}
+      bulkBtn.disabled=true;
+      try{ await grist.docApi.applyUserActions(acts);
+        modal=null;uiMsg="";await loadAll();render();
+      }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}
+    };
+  }
+  document.querySelectorAll("[data-editexp]").forEach(el=>el.onclick=e=>{
+    if(e.target.closest("[data-delexp]"))return;
+    const r=expenses.find(x=>x.id===+el.dataset.editexp); if(!r)return;
+    modal="exp";uiMsg="";
+    fv={id:r.id,date:r.dk,dep:r.department,cat:r.category,acc:r.account,
+        amt:r.amount,sup:r.supplier||"",note:r.note||""};
+    render();});
+  document.querySelectorAll("[data-delexp]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const r=expenses.find(x=>x.id===+b.dataset.delexp); if(!r)return;
+    modal="delexp";uiMsg="";
+    fv={id:r.id,label:`${RU_DD(r.dk)}, ${cats[r.category]?.name||"—"}, ${fmt(r.amount||0)} ₸`};
+    render();});
+  const delExpBtn=document.getElementById("f-delexp");
+  if(delExpBtn)delExpBtn.onclick=async()=>{
+    delExpBtn.disabled=true;
+    try{ await grist.docApi.applyUserActions([["RemoveRecord","Expenses",fv.id]]);
+      modal=null;uiMsg="";await loadAll();render();
+    }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}};
   document.querySelectorAll("[data-delcr]").forEach(b=>b.onclick=()=>{
     const id=+b.dataset.delcr;
     const r=cashrec.find(x=>x.id===id);
@@ -592,6 +770,7 @@ function wire(){
       await loadAll();render();
     }catch(e){b.disabled=false;b.textContent="Оплачено";uiMsg="Ошибка: "+(e.message||e);render();}
   });
+ }catch(e){console.error("wire:",e);}
 }
 
 // клик мимо дропдауна закрывает его; Escape закрывает модалку
