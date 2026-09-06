@@ -478,6 +478,8 @@ function render(){
   // доля расходов в выручке: понятная величина. Обратное отношение
   // (во сколько выручка покрывает расходы) при копеечных расходах
   // давало абсурд вида «покрытие 26483%».
+  // чеки приходят из iiko отдельным запросом, средний чек считаем по сумме
+  const checksCnt=rvRows.reduce((s,r)=>s+(r.checks||0),0);
   const share=cur.total>0&&expSum>0?expSum/cur.total*100:null;
   const lastExp=expenses.length?expenses[0].dk:"";
   // «чистый доход» честен только когда расходы за период вообще вносили
@@ -490,6 +492,9 @@ function render(){
       <div class="v num ${netKnown?(net>=0?"pos":"neg"):""}"${netKnown?"":' style="color:var(--muted)"'}>${fmt(net)} ₸</div>
       ${netKnown?(net>=0?`<span class="d up">в плюсе</span>`:`<span class="d down">до нуля не хватает ${fmt(-net)} ₸</span>`)
         :`<span class="d down">расходы не внесены${lastExp?", последний "+RU_DD(lastExp):""}</span>`}</div>
+    <div class="kpi"><div class="t">Средний чек</div>
+      <div class="v num">${checksCnt?fmt(cur.total/checksCnt):"—"} ₸</div>
+      <span class="d mut">${checksCnt?fmt(checksCnt)+" "+plural(checksCnt,"чек","чека","чеков"):"нет данных о чеках"}</span></div>
     <div class="kpi"><div class="t">Оборот по счетам</div><div class="v num">${fmt(cfNet)} ₸</div>
       <span class="d mut">приход минус расход</span></div>
   </div>`;
