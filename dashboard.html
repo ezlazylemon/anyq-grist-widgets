@@ -293,7 +293,7 @@ function render(){
   const depLabel=!sel.size?"Точки: все":(sel.size===1?depName([...sel][0]):`Точки: ${sel.size}`);
   const menu=`<div class="menu">
     <input type="search" id="depsearch" placeholder="Поиск точки" style="width:100%;margin-bottom:6px">
-    <div class="tools"><button data-selall>Все точки</button><button data-done>Готово</button></div>`+
+    <div class="tools"><button data-selall>Все точки</button></div>`+
     depOrder.map(id=>`<label data-nm="${esc(depName(id).toLowerCase())}"><input type="checkbox" data-dep="${id}"${sel.has(id)?" checked":""}>${esc(depName(id))}</label>`).join("")+`</div>`;
 
   const kpis=`<div class="kpis">
@@ -426,20 +426,22 @@ function wire(){
   if(cf)cf.onchange=e=>{cFrom=e.target.value;render();};
   if(ct)ct.onchange=e=>{cTo=e.target.value;render();};
   const dd=document.getElementById("depdd");
-  // выбор не перерисовывает страницу на каждый клик — применяется при закрытии
-  dd.addEventListener("toggle",()=>{
-    const was=openDD; openDD=dd.open;
-    if(was&&!dd.open) render();          // закрыли (в т.ч. кликом мимо) — применяем
-  });
+  dd.addEventListener("toggle",()=>{openDD=dd.open;});
+  // живое применение: перерисовка сразу, дропдаун остаётся открытым,
+  // поиск и прокрутка списка сохраняются
+  const rerenderKeepDD=()=>{
+    const q=document.getElementById("depsearch")?.value||"";
+    const st=dd.querySelector(".menu")?.scrollTop||0;
+    render();
+    const dd2=document.getElementById("depdd");
+    const ds2=document.getElementById("depsearch");
+    if(ds2&&q){ds2.value=q;ds2.dispatchEvent(new Event("input"));}
+    const m2=dd2?.querySelector(".menu"); if(m2)m2.scrollTop=st;
+  };
   dd.querySelectorAll("[data-dep]").forEach(cb=>cb.onchange=()=>{
     const id=+cb.dataset.dep;cb.checked?sel.add(id):sel.delete(id);
-    const s=dd.querySelector("summary");
-    s.textContent=!sel.size?"Точки: все":(sel.size===1?depName([...sel][0]):`Точки: ${sel.size}`);});
-  dd.querySelector("[data-selall]").onclick=()=>{
-    sel.clear();
-    dd.querySelectorAll("[data-dep]").forEach(cb=>cb.checked=false);
-    dd.querySelector("summary").textContent="Точки: все";};
-  dd.querySelector("[data-done]").onclick=()=>{dd.open=false;};
+    rerenderKeepDD();});
+  dd.querySelector("[data-selall]").onclick=()=>{sel.clear();rerenderKeepDD();};
   const ds=document.getElementById("depsearch");
   if(ds)ds.oninput=()=>{
     const q=ds.value.trim().toLowerCase();
