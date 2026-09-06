@@ -157,6 +157,7 @@
   .btn.sm{padding:3px 9px; font-size:12px}
   details.nh{margin-top:8px; border-top:1px solid var(--line); padding-top:8px}
   details.nh summary{cursor:pointer; color:var(--down); font-weight:600; list-style:none}
+  details.nh.paid summary{color:var(--muted)}
   details.nh summary::-webkit-details-marker{display:none}
   details.nh summary::before{content:"▸ "}
   details.nh[open] summary::before{content:"▾ "}
@@ -608,8 +609,19 @@ function render(){
         <div class="rows">${ptRows}</div></div>`;
   const cardCash=`<div class="card" id="c-cash"><h2>Сверка касс <span class="sub">последние сдачи</span><span class="cnt">${crAll.length?`всего ${crAll.length}`:""}</span></h2>
         <div class="list">${crList}</div>${nhLine}</div>`;
+  // недавно оплаченные: ошибиться легко, отменить надо в один клик
+  const paidBills=bills.filter(r=>r.paid&&inSel(r.department))
+    .sort((a,b)=>String(dstr(b.paid_date)).localeCompare(String(dstr(a.paid_date)))).slice(0,10);
+  const paidList=paidBills.map(r=>`<div class="li">
+    <span class="d num">${r.paid_date?RU_DD(dstr(r.paid_date)):""}</span>
+    <span class="t"><b>${esc(r.supplier||"Поставщик")}</b>
+      <div class="sub">${esc(shortName(r.department))}${accs[r.paid_account]?", "+esc(accs[r.paid_account].name):""}</div></span>
+    <span class="a num">${fmt(r.amount||0)}</span>
+    <button class="btn sm" data-unpay="${r.id}">Отменить оплату</button></div>`).join("");
+  const paidBlock=paidBills.length?`<details class="nh paid"><summary>Оплаченные: ${paidBills.length}${paidBills.length===10?"+":""}, ${fmt(paidBills.reduce((a,r)=>a+(r.amount||0),0))} ₸</summary>
+    <div class="nhlist">${paidList}</div></details>`:"";
   const cardBills=`<div class="card" id="c-bills"><h2>Счета к оплате<span class="cnt">${unpaid.length} шт, ${fmt(unpaid.reduce((a,r)=>a+(r.amount||0),0))} ₸</span></h2>
-        <div class="list">${billList}</div></div>`;
+        <div class="list">${billList}</div>${paidBlock}</div>`;
   const cardExp=`<div class="card wide" id="c-exp"><h2>Расходы <span class="sub">за период</span>
         <input type="search" id="expsearch" placeholder="Поиск" value="${esc(expQuery||"")}" style="margin-left:auto;max-width:180px">
         <span class="cnt">${exp.length} шт, ${fmtExp(expSum)} ₸</span></h2>
@@ -832,6 +844,19 @@ function wire(){
     modal="cash";uiMsg="";
     fv={date:b.dataset.day||addDays(dayKey(new Date()),-1),dep:b.dataset.hand};
     render();
+  });
+  document.querySelectorAll("[data-unpay]").forEach(b=>b.onclick=async()=>{
+    const id=+b.dataset.unpay, bill=bills.find(x=>x.id===id); if(!bill)return;
+    b.disabled=true; b.textContent="…";
+    // расход, созданный этой оплатой, ищем по ключу счёта
+    const linked=expenses.filter(e=>e.pay_ref&&e.pay_ref===bill.bill_key);
+    const acts=linked.map(e=>["RemoveRecord","Expenses",e.id]);
+    acts.push(["UpdateRecord","PayQueue",id,
+      {paid:false,paid_date:null,expense_created:false}]);
+    try{ await grist.docApi.applyUserActions(acts);
+      await loadAll(); render();
+    }catch(e){ b.disabled=false; b.textContent="Отменить оплату";
+      uiMsg="Ошибка: "+(e.message||e); render(); }
   });
   document.querySelectorAll("[data-pay]").forEach(b=>b.onclick=async()=>{
     const id=+b.dataset.pay,bill=bills.find(x=>x.id===id);if(!bill)return;
