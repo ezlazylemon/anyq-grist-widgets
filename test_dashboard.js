@@ -713,6 +713,21 @@ async function main() {
   check("без реквизитов есть предупреждение", h.includes("реквизиты поставщика не заполнены"));
   markupSane(h, "реквизиты в очереди оплаты");
 
+  // ---- 23. возраст неоплаченного счёта виден ----
+  resetBackend();
+  const old10 = new Date(Date.now() - 10 * 864e5).toISOString().slice(0, 10);
+  const oldEpoch = Math.floor(Date.parse(old10 + "T00:00:00Z") / 1000);
+  store.PayQueue = { id: [71, 72], bill_key: ["B71", "B72"], date_added: [oldEpoch, T0],
+    department: [1, 1], supplier: ["Старый долг", "Свежий счёт"], amount: [1000, 2000],
+    invoice_link: ["", ""], request_no: ["", ""], category: [1, 1], paid: [false, false],
+    paid_date: [null, null], paid_account: [0, 0], expense_created: [false, false],
+    requisites: ["", ""] };
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000 })]);
+  h = await render();
+  check("старый счёт помечен возрастом", /agetag old/.test(h) && h.includes("10 дней"));
+  check("свежий счёт без метки возраста", (h.match(/agetag/g) || []).length === 1);
+  markupSane(h, "возраст счетов");
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");

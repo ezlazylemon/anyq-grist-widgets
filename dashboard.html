@@ -149,6 +149,9 @@
   .li.bill .a{color:var(--down)}
   .req{font-size:11px}
   .req.none{color:var(--warn,#8A6A2B)}
+  .agetag{font-size:11px; color:var(--muted); border:1px solid var(--line);
+    border-radius:10px; padding:0 7px; margin-left:6px}
+  .agetag.old{color:var(--down); border-color:var(--down); font-weight:600}
   .filelink{color:var(--accent); text-decoration:none; margin-left:6px}
   .filelink:hover{text-decoration:underline}
   .nofile{color:var(--muted); margin-left:6px}
@@ -631,15 +634,20 @@ function render(){
   const defCat=catOrder.find(c=>/продукт/i.test(cats[c].name))||catOrder[0];
   const catSel=(id,cur)=>`<select data-catfor="${id}" title="Статья расхода">${catOrder
     .map(c=>`<option value="${c}"${(cur||defCat)===c?" selected":""}>${esc(cats[c].name)}</option>`).join("")}</select>`;
-  const billList=unpaid.map(r=>`<div class="li bill">
+  const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+  const billList=unpaid.map(r=>{
+    // сколько счёт ждёт оплаты: старые долги должны бросаться в глаза
+    const age=r.dk?daysBetween(r.dk,todayK):0;
+    const ageTag=age>=3?`<span class="agetag${age>=7?" old":""}">${age} ${plural(age,"день","дня","дней")}</span>`:"";
+    return `<div class="li bill">
     <span class="d num">${r.dk?RU_DD(r.dk):""}</span>
-    <span class="t"><b>${esc(r.supplier||"Поставщик")}</b>
+    <span class="t"><b>${esc(r.supplier||"Поставщик")}</b>${ageTag}
       <div class="sub">${esc(shortName(r.department))}${r.request_no?", заявка "+esc(r.request_no):""}
         ${r.invoice_link?`<a href="${esc(r.invoice_link)}" target="_blank" rel="noopener" class="filelink">открыть счёт</a>`:`<span class="nofile">без файла</span>`}</div>
       ${r.requisites?`<div class="sub req">${esc(r.requisites)}</div>`
         :`<div class="sub req none">реквизиты поставщика не заполнены</div>`}</span>
     <span class="a num">${fmt(r.amount||0)}</span>
-    <span class="payrow">${catSel(r.id,r.category)}${accSel(r.id)}<button class="btn primary" data-pay="${r.id}">Оплачено</button></span></div>`).join("")
+    <span class="payrow">${catSel(r.id,r.category)}${accSel(r.id)}<button class="btn primary" data-pay="${r.id}">Оплачено</button></span></div>`;}).join("")
     ||`<div class="empty-line">Неоплаченных счетов нет.</div>`;
 
   // лента расходов: поиск, группировка по дням, клик по строке правит.
