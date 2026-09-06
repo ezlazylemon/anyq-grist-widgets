@@ -8,12 +8,18 @@
   :root{
     --bg:#F1F2F4; --card:#FFFFFF; --ink:#1F2328; --muted:#68707A; --line:#D9DDE2;
     --accent:#2563B8; --up:#188A50; --down:#C6402E;
-    --cash:#B98A2F; --kaspi:#E2483B; --halyk:#1DA860; --bck:#2563B8; --deliv:#7C5CD6; --other:#98A0A8;
-    --input:#FFFFFF; --hover:#F4F6F8; --up-bg:#E5F4EC; --down-bg:#FBEAE7;
+    --input:#FFFFFF; --hover:#F4F6F8; --seg-bg:#E7E9EC;
+    /* монохромная шкала для донатов (каналы оплат, статьи расходов): от насыщенного
+       к светлому по убыванию доли; --chart8 — единственный контрастный (нейтрально-
+       серый) акцент, зарезервирован под «хвост» самых мелких долей */
+    --chart1:#1D4FBF; --chart2:#3568D4; --chart3:#4F80DE; --chart4:#6D98E6;
+    --chart5:#8FB0EC; --chart6:#B3C8F2; --chart7:#D6E2F8; --chart8:#98A2AE;
   }
   @media (prefers-color-scheme: dark){
     :root{ --bg:#17191C; --card:#1F2226; --ink:#E8EAEC; --muted:#8C939B; --line:#33383E;
-           --input:#191C1F; --hover:#262A2F; --up-bg:#173226; --down-bg:#3A211D; }
+           --input:#191C1F; --hover:#262A2F; --seg-bg:#2A2E33;
+           --chart1:#6C93EA; --chart2:#5580E2; --chart3:#436FD6; --chart4:#3A5FB8;
+           --chart5:#334E93; --chart6:#2D4270; --chart7:#28374F; --chart8:#7A828C; }
   }
   *{box-sizing:border-box; margin:0}
   body{background:var(--bg); color:var(--ink);
@@ -26,31 +32,40 @@
   .card{background:var(--card); border:1px solid var(--line); border-radius:6px; padding:12px 14px}
   button{font:inherit; cursor:pointer}
   select,input{font:inherit; color:var(--ink); background:var(--input);
-    border:1px solid var(--line); border-radius:5px; padding:5px 8px; max-width:100%}
+    border:1px solid var(--line); border-radius:6px; padding:5px 8px; max-width:100%}
+  select:hover,input:hover{border-color:var(--muted)}
   :focus-visible{outline:2px solid var(--accent); outline-offset:1px}
 
   .toolbar{display:flex; gap:8px; align-items:flex-start; margin-bottom:10px}
   .tb-filters{display:flex; flex-wrap:wrap; gap:6px; align-items:center; flex:1 1 auto; min-width:0}
   .tb-actions{display:flex; gap:6px; align-items:center; flex:0 0 auto}
   @media (max-width:700px){ .toolbar{flex-wrap:wrap} }
-  .pills{display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--card)}
-  .pill{border:0; border-right:1px solid var(--line); background:transparent; color:var(--ink); padding:6px 11px}
-  .pill:last-child{border-right:0}
-  .pill.on{background:var(--accent); color:#fff}
+  /* сегментированный контрол (вкладки, пилюли периодов) в духе NocoDB:
+     нейтральная подложка-трек, активный элемент — светлая плашка с тенью,
+     без сплошной синей заливки */
+  .pills{display:flex; flex-wrap:wrap; gap:2px; border:1px solid var(--line); border-radius:6px;
+    padding:2px; background:var(--seg-bg)}
+  .pill{border:0; background:transparent; color:var(--muted); border-radius:4px; padding:5px 10px}
+  .pill:hover:not(.on){color:var(--ink)}
+  .pill.on{background:var(--card); color:var(--ink); font-weight:600; box-shadow:0 1px 2px rgba(15,17,20,.1)}
   .range{display:flex; gap:4px; align-items:center}
   .dd{position:relative}
   .dd>summary{list-style:none; cursor:pointer; border:1px solid var(--line); background:var(--card);
     border-radius:6px; padding:6px 11px; user-select:none; white-space:nowrap}
+  .dd>summary:hover{background:var(--hover)}
   .dd>summary::-webkit-details-marker{display:none}
   .dd .menu{position:absolute; z-index:30; top:calc(100% + 4px); left:0; min-width:240px; max-height:300px; overflow:auto;
     background:var(--card); border:1px solid var(--line); border-radius:6px; padding:8px; box-shadow:0 4px 14px rgba(0,0,0,.12)}
   .dd .menu .tools{display:flex; gap:6px; margin-bottom:6px}
-  .dd .menu .tools button{border:1px solid var(--line); background:transparent; color:var(--accent); border-radius:5px; padding:3px 8px; font-size:12px}
+  .dd .menu .tools button{border:1px solid var(--line); background:transparent; color:var(--accent); border-radius:6px; padding:3px 8px; font-size:12px}
   .dd .menu label{display:flex; gap:7px; align-items:center; padding:3px 4px; border-radius:4px}
   .dd .menu label:hover{background:var(--hover)}
   .btn{border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:6px; padding:6px 11px}
+  .btn:hover{background:var(--hover)}
   .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600}
-  .btn.ghost{color:var(--accent); border-color:var(--accent)}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.ghost{color:var(--accent); border-color:var(--line)}
+  .btn.ghost:hover{background:var(--hover)}
   .btn:disabled{opacity:.5; cursor:default}
   .spacer{flex:1}
 
@@ -70,13 +85,13 @@
   .donut{flex:none}
   .lg{display:flex; flex-direction:column; gap:3px; min-width:150px; flex:1}
   .lg .it{display:flex; gap:7px; align-items:baseline}
-  .lg .sq{width:9px; height:9px; border-radius:2px; flex:none; align-self:center}
+  .lg .sq{width:9px; height:9px; border-radius:2px; flex:none; align-self:center; border:1px solid rgba(0,0,0,.08)}
   .lg .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .lg .vv{font-weight:600} .lg .pp{color:var(--muted); width:38px; text-align:right}
 
   .rows{display:flex; flex-direction:column; gap:4px}
   .row{display:grid; grid-template-columns:minmax(84px,34%) 1fr auto 44px; gap:9px; align-items:center; padding:1px 0}
-  .pdelta{font-size:11px; font-weight:600; text-align:right}
+  .pdelta{font-size:12px; font-weight:600; text-align:right}
   .pdelta.up{color:var(--up)} .pdelta.down{color:var(--down)}
   .row .name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .row .track{height:7px; border-radius:3px; background:var(--line); overflow:hidden}
@@ -89,24 +104,25 @@
   .cb{max-width:52px}
   .cb i{display:block; width:100%; background:var(--line); border-radius:2px 2px 0 0}
   .cb.insel i{background:var(--accent)}
-  .cb.today i{background:var(--kaspi)}
+  .cb.today i{background:var(--down)}
   .cb.insel .lbl{color:var(--ink); font-weight:600}
-  .cb .lbl{font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden}
+  .cb .lbl{font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden}
   .cb:hover::after{content:attr(data-tip); position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
-    background:var(--ink); color:var(--card); font-size:11px; padding:2px 7px; border-radius:4px; white-space:nowrap; z-index:5}
+    background:var(--ink); color:var(--card); font-size:12px; padding:2px 7px; border-radius:4px; white-space:nowrap; z-index:5}
 
   table{width:100%; border-collapse:collapse}
-  th{font-size:11px; color:var(--muted); font-weight:500; text-align:right; padding:3px 6px; border-bottom:1px solid var(--line)}
+  th{font-size:12px; color:var(--muted); font-weight:500; text-align:right; padding:3px 6px; border-bottom:1px solid var(--line)}
   th:first-child,td:first-child{text-align:left}
   td{padding:4px 6px; text-align:right; border-bottom:1px solid var(--line)}
   tr:last-child td{border-bottom:0}
   td.pos{color:var(--up); font-weight:600} td.neg{color:var(--down); font-weight:600}
 
   .signals{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
-  .chip{border:1px solid var(--line); background:var(--card); color:var(--muted);
-    border-radius:20px; padding:5px 12px; font-size:12px}
-  .chip.alert{border-color:var(--down); background:var(--down-bg); color:var(--down); font-weight:600}
-  .pills.tabs .pill.on{background:var(--ink); color:var(--card)}
+  .chip{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--card);
+    color:var(--ink); border-radius:20px; padding:5px 12px; font-size:12px}
+  .chip .dot{width:6px; height:6px; border-radius:50%; background:var(--muted); flex:none}
+  .chip.alert{color:var(--down); font-weight:600}
+  .chip.alert .dot{background:var(--down)}
   .li.exp{cursor:pointer} .li.exp:hover{background:var(--hover)}
   .list{display:flex; flex-direction:column}
   
@@ -131,10 +147,11 @@
   .nofile{color:var(--muted); margin-left:6px}
   .payrow{display:flex; gap:5px; align-items:center; flex:none}
   .empty-line{color:var(--muted); padding:12px 2px}
-  .badge{font-size:11px; font-weight:600; border-radius:4px; padding:2px 7px; white-space:nowrap}
-  .badge.up{background:var(--up-bg); color:var(--up)}
-  .badge.down{background:var(--down-bg); color:var(--down)}
-  .badge.zero{background:var(--hover); color:var(--muted)}
+  .badge{font-size:12px; font-weight:600; border-radius:4px; padding:2px 7px; white-space:nowrap;
+    border:1px solid var(--line); background:var(--card)}
+  .badge.up{color:var(--up)}
+  .badge.down{color:var(--down)}
+  .badge.zero{color:var(--muted)}
   .del{border:0; background:none; color:var(--muted); font-size:16px; line-height:1; padding:0 2px; flex:none}
   .del:hover{color:var(--down)}
   .btn.sm{padding:3px 9px; font-size:12px}
@@ -144,7 +161,7 @@
   details.nh summary::before{content:"▸ "}
   details.nh[open] summary::before{content:"▾ "}
   .nhlist{margin-top:6px}
-  .nhday{font-size:11px; color:var(--muted); font-weight:600; padding:7px 0 2px; position:sticky; top:0; background:var(--card)}
+  .nhday{font-size:12px; color:var(--muted); font-weight:600; padding:7px 0 2px; position:sticky; top:0; background:var(--card)}
   .nhrow{display:flex; gap:9px; align-items:center; padding:3px 0}
   .nhrow .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
@@ -159,11 +176,11 @@
   .form .widef{grid-column:1/-1}
   .form label{display:flex; flex-direction:column; gap:2px; font-size:12px; color:var(--muted)}
   .form label>*{width:100%}
-  .hint{grid-column:1/-1; font-size:12px; color:var(--muted); background:var(--hover); border-radius:5px; padding:6px 9px}
+  .hint{grid-column:1/-1; font-size:12px; color:var(--muted); background:var(--hover); border-radius:6px; padding:6px 9px}
   .hint b.pos{color:var(--up)} .hint b.neg{color:var(--down)}
   .msg{font-size:12px; margin-left:8px}
   .msg.ok{color:var(--up)} .msg.err{color:var(--down)}
-  .foot{margin-top:8px; color:var(--muted); font-size:11px}
+  .foot{margin-top:8px; color:var(--muted); font-size:12px}
   .empty{padding:40px 20px; text-align:center; color:var(--muted)}
 </style>
 </head>
@@ -173,11 +190,13 @@
 <script>
 "use strict";
 const CH=[
- {k:"cash",n:"Наличные",c:"var(--cash)"},{k:"kaspi",n:"Kaspi",c:"var(--kaspi)"},
- {k:"halyk",n:"Halyk",c:"var(--halyk)"},{k:"bck",n:"БЦК",c:"var(--bck)"},
- {k:"deliv",n:"Доставка",c:"var(--deliv)"},{k:"other",n:"Прочее",c:"var(--other)"}];
+ {k:"cash",n:"Наличные"},{k:"kaspi",n:"Kaspi"},
+ {k:"halyk",n:"Halyk"},{k:"bck",n:"БЦК"},
+ {k:"deliv",n:"Доставка"},{k:"other",n:"Прочее"}];
 const DELIV=["glovo","wolt","chocofood","yandex"];
-const CATC=["#2563B8","#E2483B","#1DA860","#B98A2F","#7C5CD6","#D97706","#0E7490","#BE185D","#4D7C0F","#98A0A8"];
+// монохромная шкала (см. --chart1..8 в <style>): по убыванию доли, --chart8 —
+// нейтрально-серый «хвост» для самых мелких долей
+const CATC=["var(--chart1)","var(--chart2)","var(--chart3)","var(--chart4)","var(--chart5)","var(--chart6)","var(--chart7)","var(--chart8)"];
 const TZ="Asia/Aqtobe";
 const fmt=n=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(n);
 // сумма расхода со знаком «−»: если сумма сама отрицательна (сторно/возврат),
@@ -474,7 +493,9 @@ function render(){
       <span class="d mut">приход минус расход</span></div>
   </div>`;
 
-  const chParts=CH.filter(c=>cur[c.k]>0).map(c=>({v:cur[c.k],c:c.c,label:c.n}));
+  // цвет по рангу доли (как у catParts ниже) — согласованная монохромная шкала на обоих донатах
+  const chParts=CH.filter(c=>cur[c.k]>0).map(c=>({v:cur[c.k],label:c.n}))
+    .sort((a,b)=>b.v-a.v).map((p,i)=>({...p,c:CATC[i%CATC.length]}));
   const byCat={};
   exp.forEach(r=>{byCat[r.category]=(byCat[r.category]||0)+(r.amount||0);});
   // сторно (отрицательная сумма) ломает сегмент круговой диаграммы —
@@ -575,7 +596,7 @@ function render(){
 
   // строка сигналов: что требует действия прямо сейчас
   const zeroPts=pts.filter(p=>p.v===0).length;
-  const chip=(on,txt,target)=>`<button class="chip${on?" alert":""}" data-goto="${target}">${txt}</button>`;
+  const chip=(on,txt,target)=>`<button class="chip${on?" alert":""}" data-goto="${target}"><span class="dot"></span>${txt}</button>`;
   const signals=`<div class="signals">
     ${chip(debtDays.length>0,`Касса не сдана: ${debtDays.length?fmt(debtSum)+" ₸":"нет"}`,"c-cash")}
     ${chip(unpaid.length>0,`Счета к оплате: ${unpaid.length?unpaid.length+" на "+fmt(unpaid.reduce((a,r)=>a+(r.amount||0),0))+" ₸":"нет"}`,"c-bills")}
