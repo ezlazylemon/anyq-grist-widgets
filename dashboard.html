@@ -474,7 +474,9 @@ function render(){
   const chParts=CH.filter(c=>cur[c.k]>0).map(c=>({v:cur[c.k],c:c.c,label:c.n}));
   const byCat={};
   exp.forEach(r=>{byCat[r.category]=(byCat[r.category]||0)+(r.amount||0);});
-  const catParts=Object.entries(byCat).sort((a,b)=>b[1]-a[1])
+  // сторно (отрицательная сумма) ломает сегмент круговой диаграммы —
+  // в круг идут только положительные статьи, минусовые видны в ленте
+  const catParts=Object.entries(byCat).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1])
     .map(([id,v],i)=>({v,c:CATC[i%CATC.length],label:cats[id]?.name||"—"}));
 
   const byDep={},byDepPrev={};
