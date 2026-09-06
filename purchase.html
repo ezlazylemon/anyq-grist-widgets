@@ -119,11 +119,28 @@ async function loadAll(){
     .sort((a,b)=>(b.dk||"").localeCompare(a.dk||"")||b.id-a.id):[];
 }
 
+const itemSum=i=>i.Total_price||((i.Quantity||0)*(i.Unit_price||0))||0;
 function reqTotal(r){
   const own=items.filter(i=>i.Request_ID===r.id);
-  return own.length?own.reduce((s,i)=>s+(i.Total_price||i.Quantity*i.Unit_price||0),0):(r.Total_amount||0);
+  return own.length?own.reduce((s,i)=>s+itemSum(i),0):(r.Total_amount||0);
 }
 const reqDep=r=>r.department_ref||0;
+
+// в одной заявке позиции могут быть от разных поставщиков:
+// счёт выставляется на конкретного, сумма считается по его позициям
+function reqBySupplier(reqId){
+  const map=new Map();
+  items.filter(i=>i.Request_ID===reqId).forEach(i=>{
+    const sid=i.Supplier||0;
+    const cur=map.get(sid)||{sum:0,names:[]};
+    cur.sum+=itemSum(i);
+    if(i.Item_name)cur.names.push(i.Item_name);
+    map.set(sid,cur);});
+  return [...map.entries()].map(([sid,v])=>({sid,sum:Math.round(v.sum*100)/100,names:v.names}))
+    .sort((a,b)=>b.sum-a.sum);
+}
+const billedFor=(reqId,sid)=>bills.filter(b=>b.request===reqId&&(sid===undefined||b.supplier===sid))
+  .reduce((s,b)=>s+(b.amount||0),0);
 
 function billStatus(b){
   if(b.paid)return {cls:"ok",txt:"оплачен"};
@@ -146,9 +163,18 @@ function modalHtml(){
         <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${fv.amt||""}" placeholder="0"></label>
         <label class="widef">Заявка<select id="f-req"><option value="0">— без заявки —</option>
           ${reqs.map(r=>`<option value="${r.id}"${+fv.req===r.id?" selected":""}>${esc(String(r.PR_Number||("заявка "+r.id)))} · ${esc(depName(reqDep(r)))} · ${fmt(reqTotal(r))} ₸</option>`).join("")}</select></label>
+        <label class="widef">Файл счёта<input type="file" id="f-file" accept="image/*,application/pdf"></label>
         <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note||"")}" placeholder="за что"></label>
-        ${linkedReq?`<div class="hint">Заявка на ${fmt(reqTotal(linkedReq))} ₸, статус: ${esc(linkedReq.Status||"—")}</div>`:""}
-        <div class="hint">Файл счёта прикрепите в таблице Bills (колонка invoice) — вложения через это окно пока не грузятся.</div>
+        ${linkedReq?(()=>{
+          const parts=reqBySupplier(linkedReq.id);
+          const done=billedFor(linkedReq.id);
+          const rest=reqTotal(linkedReq)-done;
+          const bySup=parts.length>1?`<div style="margin-top:5px">Поставщики заявки: `+
+            parts.map(p=>{
+              const b=billedFor(linkedReq.id,p.sid);
+              return `<button type="button" class="btn sm" data-part="${p.sid}" data-sum="${p.sum}">${esc(supName(p.sid)||"без поставщика")}: ${fmt(p.sum)}${b?" (выставлено "+fmt(b)+")":""}</button>`;}).join(" ")+`</div>`:"";
+          return `<div class="hint">Заявка на ${fmt(reqTotal(linkedReq))} ₸, статус: ${esc(linkedReq.Status||"—")}.
+            ${done?`Уже выставлено счетов: ${fmt(done)} ₸, остаток ${fmt(rest)} ₸.`:"Счетов по ней ещё нет."}${bySup}</div>`;})():""}
         <div class="widef">
           <button class="btn primary" id="f-save">${fv.id?"Сохранить":"Создать"}</button>
           <button class="btn ghost" id="f-saveready">${fv.id?"Сохранить и отправить":"Создать и отправить"}</button>
@@ -204,16 +230,19 @@ function render(){
     const dep=reqDep(r),total=reqTotal(r);
     const has=bills.filter(b=>b.request===r.id);
     const paidSum=has.filter(b=>b.paid).reduce((s,b)=>s+(b.amount||0),0);
+    const parts=reqBySupplier(r.id);
+    const covered=billedFor(r.id);
+    const restTxt=parts.length>1?`, поставщиков: ${parts.length}${covered<total?`, не выставлено ${fmt(total-covered)}`:""}`:"";
     const st=r.Is_received?{cls:"ok",txt:"получено"}
       :(r.ed&&r.ed<todayK)?{cls:"late",txt:"просрочено"}
       :{cls:"wait",txt:esc(r.Status||"в работе")};
     return `<div class="li">
       <span class="d num">${RU_DD(r.ed)}</span>
       <span class="t"><b>${esc(String(r.PR_Number||("Заявка "+r.id)))}</b>
-        <div class="sub">${esc(depName(dep))}${r.Requested_by?", "+esc(r.Requested_by):""}${has.length?`, счетов: ${has.length}${paidSum?" (оплачено "+fmt(paidSum)+")":""}`:", счёта нет"}</div></span>
+        <div class="sub">${esc(depName(dep))}${r.Requested_by?", "+esc(r.Requested_by):""}${has.length?`, счетов: ${has.length}${paidSum?" (оплачено "+fmt(paidSum)+")":""}`:", счёта нет"}${restTxt}</div></span>
       <span class="a num">${fmt(total)}</span>
       <span class="badge ${st.cls}">${st.txt}</span>
-      <span class="acts">${has.length?"":`<button class="btn ghost sm" data-billfor="${r.id}">Выставить счёт</button>`}</span></div>`;};
+      <span class="acts">${covered>=total&&has.length?"":`<button class="btn ghost sm" data-billfor="${r.id}">Выставить счёт</button>`}</span></div>`;};
 
   const supRow=id=>{
     const s=sups[id];
@@ -282,9 +311,13 @@ function wire(){
 
   document.querySelectorAll("[data-billfor]").forEach(b=>b.onclick=()=>{
     const r=reqs.find(x=>x.id===+b.dataset.billfor);
+    const parts=reqBySupplier(r.id);
+    // если поставщик в заявке один — подставляем его и сумму по его позициям;
+    // если несколько — сумму не угадываем, закупщик выбирает поставщика в окне
+    const single=parts.length===1?parts[0]:null;
     modal="bill";uiMsg="";
-    fv={dep:reqDep(r)||depOrder[0],req:r.id,amt:reqTotal(r)||"",
-        sup:items.find(i=>i.Request_ID===r.id&&i.Supplier)?.Supplier||0,
+    fv={dep:reqDep(r)||depOrder[0],req:r.id,
+        amt:single?single.sum:"",sup:single?single.sid:0,
         note:`по заявке ${r.PR_Number||r.id}`};
     render();});
 
@@ -317,6 +350,16 @@ function wire(){
       await loadAll();render();
     }catch(e){b.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}});
 
+  // при выборе заявки перерисовываем окно: появятся её поставщики и остаток
+  const rq=document.getElementById("f-req");
+  if(rq)rq.onchange=()=>{fv=grab();render();};
+  document.querySelectorAll("[data-part]").forEach(b=>b.onclick=()=>{
+    fv=grab();fv.sup=b.dataset.part;fv.amt=b.dataset.sum;
+    const nm=supName(+b.dataset.part);
+    const req=reqs.find(r=>r.id===+fv.req);
+    fv.note=`по заявке ${req?.PR_Number||fv.req}${nm?", "+nm:""}`;
+    render();});
+
   const save=async ready=>{
     fv=grab();
     const amt=parseFloat(fv.amt);
@@ -326,7 +369,19 @@ function wire(){
       supplier_name:supName(+fv.sup)||"",request:+fv.req||0,amount:amt,
       note:(fv.note||"").trim(),created_by:"закупщик"};
     if(ready)flds.ready=true;
+    const fileInput=document.getElementById("f-file");
+    const file=fileInput&&fileInput.files&&fileInput.files[0];
     try{
+      if(file){
+        uiMsg="Загружаю файл…";
+        const tok=await grist.docApi.getAccessToken({readOnly:false});
+        const fd=new FormData();
+        fd.append("upload",file,file.name);
+        const res=await fetch(`${tok.baseUrl}/attachments?auth=${tok.token}`,{method:"POST",body:fd});
+        if(!res.ok)throw new Error("файл не загрузился: "+res.status);
+        const ids=await res.json();
+        flds.invoice=["L",...(Array.isArray(ids)?ids:[ids])];
+      }
       await grist.docApi.applyUserActions([ fv.id
         ? ["UpdateRecord","Bills",fv.id,flds]
         : ["AddRecord","Bills",null,flds] ]);
