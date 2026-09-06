@@ -152,6 +152,8 @@
   .badge.up{color:var(--up)}
   .badge.down{color:var(--down)}
   .badge.zero{color:var(--muted)}
+  .warnmark{font-size:11px; color:var(--warn,#8A6A2B); border:1px solid var(--line);
+    border-radius:4px; padding:1px 6px; margin-left:6px; cursor:help}
   .del{border:0; background:none; color:var(--muted); font-size:16px; line-height:1; padding:0 2px; flex:none}
   .del:hover{color:var(--down)}
   .btn.sm{padding:3px 9px; font-size:12px}
@@ -548,9 +550,10 @@ function render(){
     const badge=d===0?`<span class="badge zero">сошлось</span>`
       :d>0?`<span class="badge up">излишек +${fmt(d)}</span>`
            :`<span class="badge down">недосдача −${fmt(-d)}</span>`;
+    const moved=r.data_changed?` <span class="warnmark" title="После сдачи в этот день внесли расходы или обновилась выручка. Разница считается по снимку на момент сдачи (${fmt(r.expected_at_submit||0)}).">данные менялись</span>`:"";
     return `<div class="li"><span class="d num">${RU_DD(r.dk)}</span>
-      <span class="t"><b>${esc(shortName(r.department))}</b>
-        <div class="sub">ожидалось ${fmt(r.cash_expected||0)}, сдано ${fmt(r.cash_actual||0)}${r.note?", "+esc(r.note):""}</div></span>
+      <span class="t"><b>${esc(shortName(r.department))}</b>${moved}
+        <div class="sub">ожидалось ${fmt(r.expected_at_submit||r.cash_expected||0)}, сдано ${fmt(r.cash_actual||0)}${r.note?", "+esc(r.note):""}</div></span>
       ${badge}<button class="del" data-delcr="${r.id}" title="Удалить запись">×</button></div>`;}).join("")
     ||`<div class="empty-line">Сдач ещё не вносили. Раскройте список ниже и нажмите «Внести».</div>`;
   // несданная касса за ВСЕ закрытые дни (сегодня не считаем, день идёт)
@@ -767,6 +770,7 @@ function wire(){
       // одна сдача на точку и день: если запись есть, обновляем её
       const ex=cashrec.find(r=>r.dk===dk&&r.department===dep);
       const flds={date:epoch(dk),department:dep,cash_actual:amt,
+        expected_at_submit:expectedCash(dk,dep),
         note:(fv.note||"").trim(),submitted_by:"дашборд"};
       try{
         await grist.docApi.applyUserActions([ ex
@@ -815,7 +819,8 @@ function wire(){
         const v=parseFloat(inp.value); if(isNaN(v)||v<0)return;
         const dep=+inp.dataset.bulk;
         const ex=cashrec.find(r=>r.dk===dk&&r.department===dep);
-        const flds={date:epoch(dk),department:dep,cash_actual:v,submitted_by:"дашборд"};
+        const flds={date:epoch(dk),department:dep,cash_actual:v,
+          expected_at_submit:expectedCash(dk,dep),submitted_by:"дашборд"};
         if(ex){ if((ex.cash_actual||0)!==v) acts.push(["UpdateRecord","CashReconciliation",ex.id,flds]); }
         else acts.push(["AddRecord","CashReconciliation",null,flds]);});
       if(!acts.length){uiMsg="Ошибка: не заполнено ни одной суммы";render();return;}
