@@ -159,6 +159,8 @@ const RU_DD=k=>new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"2-digit",month:
 const addDays=(k,n)=>{const d=new Date(k+"T12:00:00");d.setDate(d.getDate()+n);return dayKey(d);};
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const epoch=k=>Math.floor(Date.UTC(+k.slice(0,4),+k.slice(5,7)-1,+k.slice(8,10))/1000);
+const plural=(n,one,few,many)=>{const a=Math.abs(n)%100,b=a%10;
+  return a>10&&a<20?many:b>1&&b<5?few:b===1?one:many;};
 
 let recs=[],deps={},depOrder=[],nameToId={},cats={},catOrder=[],accs={},accOrder=[];
 let expenses=[],bills=[],cashrec=[];
@@ -401,12 +403,12 @@ function render(){
     debtSum+=s; debtCount+=list.length;
     debtDays.push({k,list,s});});
   const shown=debtDays.slice(0,10);
-  const nhLine=debtDays.length?`<details class="nh"><summary>Не сдана касса: ${debtCount} точко-дней на ${fmt(debtSum)} ₸</summary>
-    <div class="nhlist">`+shown.map(d=>`<div class="nhday">${RU_D(d.k)} · ${d.list.length} точек · ${fmt(d.s)} ₸</div>`+
+  const nhLine=debtDays.length?`<details class="nh"><summary>Не сдана касса за ${debtDays.length} ${plural(debtDays.length,"день","дня","дней")}: ${fmt(debtSum)} ₸</summary>
+    <div class="nhlist">`+shown.map(d=>`<div class="nhday">${RU_D(d.k)}: ${d.list.length} ${plural(d.list.length,"точка","точки","точек")}, ${fmt(d.s)} ₸</div>`+
       d.list.map(x=>`<div class="nhrow"><span class="nm">${esc(shortName(x.id))}</span>
         <span class="num">${fmt(x.v)}</span>
         <button class="btn ghost sm" data-hand="${x.id}" data-day="${d.k}">Внести</button></div>`).join("")).join("")+
-      (debtDays.length>shown.length?`<div class="nhday">и ещё ${debtDays.length-shown.length} дней</div>`:``)+
+      (debtDays.length>shown.length?`<div class="nhday">и ещё ${debtDays.length-shown.length} ${plural(debtDays.length-shown.length,"день","дня","дней")}</div>`:``)+
     `</div></details>`:"";
 
   const unpaid=bills.filter(r=>!r.paid&&inSel(r.department)).sort((a,b)=>a.dk.localeCompare(b.dk));
