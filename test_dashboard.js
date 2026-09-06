@@ -624,6 +624,18 @@ async function main() {
   markupSane(h, "прибыль по точкам");
   S("tab", "money");
 
+  // ---- 18. сбой чтения данных виден, а не показан нулями ----
+  resetBackend();
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000 })]);
+  S("loadError", "сеть недоступна");
+  h = await render();
+  check("сбой загрузки: показан баннер", h.includes("Не удалось прочитать данные"));
+  check("сбой загрузки: указана причина", h.includes("сеть недоступна"));
+  markupSane(h, "баннер сбоя загрузки");
+  S("loadError", "");
+  h = await render();
+  check("после успешной загрузки баннера нет", !h.includes("Не удалось прочитать данные"));
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");

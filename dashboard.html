@@ -120,6 +120,8 @@
   tr:last-child td{border-bottom:0}
   td.pos{color:var(--up); font-weight:600} td.neg{color:var(--down); font-weight:600}
 
+  .loaderr{background:var(--down-bg,#F6F1F0); color:var(--down); border:1px solid var(--down);
+    border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:12px; font-weight:600}
   .signals{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
   .chip{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--card);
     color:var(--ink); border-radius:20px; padding:5px 12px; font-size:12px}
@@ -226,7 +228,8 @@ let curExp=[];   // расходы за текущий период (без уч
 let period="today",cFrom="",cTo="";
 let sel=new Set(), selInit=false;   // выбранные точки; по умолчанию — все, галочки стоят
 let openDD=false, modal=null, uiMsg="", fv={};
-let tab="money", expQuery="", ptSort="sum";       // вкладка (money | an) и поиск по расходам
+let tab="money", expQuery="", ptSort="sum";
+let loadError="";   // сбой чтения данных: показываем явно, а не нулями       // вкладка (money | an) и поиск по расходам
 
 const depId=v=>typeof v==="number"?v:(Array.isArray(v)?(+v[v.length-1]||0):(nameToId[String(v)]||0));
 const depName=id=>deps[id]?.name||("#"+id);
@@ -699,7 +702,10 @@ function render(){
     ? `<div class="grid">${cardPoints}${cardCash}${cardBills}${cardExp}</div>`
     : `<div class="grid">${cardChart}${cardCF}${cardProfit}${cardDonutRev}${cardDonutExp}</div>`;
 
+  const errBanner=loadError?`<div class="loaderr">Не удалось прочитать данные из Grist: ${esc(loadError)}.
+    Показанные цифры могут быть неполными. Обновите страницу; если не помогает, проверьте доступ виджета к документу.</div>`:"";
   app.innerHTML=`
+    ${errBanner}
     <div class="toolbar">
       <div class="tb-filters">
         <div class="pills tabs">
@@ -957,7 +963,8 @@ document.addEventListener("keydown",e=>{
 grist.ready({requiredAccess:"full"});
 grist.onRecords(async rows=>{
   recs=rows;
-  try{await loadAll();}catch(e){console.warn("loadAll:",e);}
+  try{await loadAll();loadError="";}
+  catch(e){loadError=String(e&&e.message||e);console.warn("loadAll:",e);}
   render();
 });
 </script>

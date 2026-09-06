@@ -45,6 +45,8 @@
   .btn.sm{padding:3px 9px; font-size:12px}
   .btn:disabled{opacity:.5; cursor:default}
   .spacer{flex:1}
+  .loaderr{background:var(--down-bg,#F6F1F0); color:var(--down); border:1px solid var(--down);
+    border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:12px; font-weight:600}
   .signals{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
   .chip{display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line);
     background:var(--card); color:var(--muted); border-radius:20px; padding:5px 12px; font-size:12px}
@@ -112,6 +114,7 @@ const cols=t=>{const ks=Object.keys(t),n=t.id.length,out=[];
 let reqs=[],items=[],sups={},supOrder=[],deps={},depOrder=[],bills=[];
 let tab="bills", modal=null, fv={}, uiMsg="", noBills=false;
 let q="", depFilter=0;   // поиск по спискам и фильтр по точке
+let loadError="";   // сбой чтения данных: показываем явно, а не нулями
 // modalReturn: куда вернуть id только что созданного поставщика, если форма
 // поставщика была открыта «быстрым» способом поверх счёта/позиции заявки
 let prevModal=null, prevFv=null, modalReturn=null, itemKeySeq=1;
@@ -436,7 +439,10 @@ function render(){
         ?supOrder.filter(id=>hit(sups[id].Name,sups[id].Contact_person,sups[id].Phone)).map(supRow).join(""):`<tr><td colspan="5" class="empty-line">Поставщиков нет.</td></tr>`}</table></div>`;
   }
 
+  const errBanner=loadError?`<div class="loaderr">Не удалось прочитать данные из Grist: ${esc(loadError)}.
+    Списки могут быть неполными — обновите страницу.</div>`:"";
   app.innerHTML=`
+    ${errBanner}
     <div class="toolbar">
       <div class="pills">
         <button class="pill${tab==="bills"?" on":""}" data-tab="bills">Счета</button>
@@ -761,7 +767,8 @@ document.addEventListener("keydown",e=>{
 
 grist.ready({requiredAccess:"full"});
 grist.onRecords(async()=>{
-  try{await loadAll();}catch(e){console.warn("loadAll:",e);}
+  try{await loadAll();loadError="";}
+  catch(e){loadError=String(e&&e.message||e);console.warn("loadAll:",e);}
   render();
 });
 </script>
