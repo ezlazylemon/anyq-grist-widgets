@@ -300,7 +300,7 @@ function render(){
     :sel.size===1?depName([...sel][0]):`Точки: ${sel.size} из ${depOrder.length}`;
   const menu=`<div class="menu">
     <input type="search" id="depsearch" placeholder="Поиск точки" style="width:100%;margin-bottom:6px">
-    <div class="tools"><button data-selall>Все точки</button></div>`+
+    <div class="tools"><button data-selall>Выбрать все</button><button data-selnone>Сбросить</button></div>`+
     depOrder.map(id=>`<label data-nm="${esc(depName(id).toLowerCase())}"><input type="checkbox" data-dep="${id}"${sel.has(id)?" checked":""}>${esc(depName(id))}</label>`).join("")+`</div>`;
 
   const cover=expSum>0?cur.total/expSum*100:null;
@@ -451,6 +451,7 @@ function wire(){
     const id=+cb.dataset.dep;cb.checked?sel.add(id):sel.delete(id);
     rerenderKeepDD();});
   dd.querySelector("[data-selall]").onclick=()=>{sel=new Set(depOrder);rerenderKeepDD();};
+  dd.querySelector("[data-selnone]").onclick=()=>{sel.clear();rerenderKeepDD();};
   const ds=document.getElementById("depsearch");
   if(ds)ds.oninput=()=>{
     const q=ds.value.trim().toLowerCase();
