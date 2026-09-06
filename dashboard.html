@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Касса APORT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F4F2; --card:#FFFFFF; --ink:#191C1F; --muted:#6B7178; --line:#E3E3DE;
+    --cash:#B98A2F; --kaspi:#F14635; --halyk:#1DA860; --bck:#2563B8;
+    --deliv:#8B5CF6; --other:#9AA0A6; --up:#1DA860; --down:#D24A35;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#15171A; --card:#1E2126; --ink:#ECEDEE; --muted:#8B9198; --line:#2C3036; }
+  }
+  *{box-sizing:border-box; margin:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    font-size:14px; line-height:1.45; padding:20px 22px 28px;
+  }
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+  .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:600}
+  /* ── чек дня ── */
+  .tape{background:var(--card); border:1px solid var(--line); border-radius:10px;
+        padding:18px 20px 16px; position:relative; overflow:hidden}
+  .tape::before{content:""; position:absolute; top:0; left:0; right:0; height:3px;
+        background:linear-gradient(90deg,var(--cash),var(--kaspi),var(--halyk),var(--bck),var(--deliv))}
+  .total{font-size:clamp(30px,6vw,44px); font-weight:600; margin:6px 0 2px}
+  .total small{font-size:.55em; color:var(--muted); font-weight:500}
+  .delta{font-weight:600}
+  .delta.up{color:var(--up)} .delta.down{color:var(--down)}
+  .vs{color:var(--muted); margin-top:2px}
+  .bar{display:flex; height:14px; border-radius:7px; overflow:hidden; margin:14px 0 10px; background:var(--line)}
+  .bar div{height:100%}
+  .legend{display:flex; flex-wrap:wrap; gap:6px 16px}
+  .legend .item{display:flex; align-items:center; gap:6px; white-space:nowrap}
+  .dot{width:8px; height:8px; border-radius:2px; flex:none}
+  .item b{font-weight:600}
+  .item .pct{color:var(--muted)}
+  /* ── сетки ── */
+  .grid{display:grid; gap:14px; margin-top:14px; grid-template-columns:1fr 1fr}
+  @media (max-width:760px){ .grid{grid-template-columns:1fr} }
+  .card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px}
+  .card h2{font-size:13px; font-weight:600; margin-bottom:10px}
+  .card h2 span{color:var(--muted); font-weight:500}
+  /* топ точек */
+  .rows{display:flex; flex-direction:column; gap:7px}
+  .row{display:grid; grid-template-columns:minmax(90px,38%) 1fr auto; gap:10px; align-items:center}
+  .row .name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .row .track{height:8px; border-radius:4px; background:var(--line); overflow:hidden}
+  .row .track div{height:100%; border-radius:4px; background:var(--kaspi); opacity:.85}
+  .row .val{font-size:12px}
+  .row.zero .name,.row.zero .val{color:var(--down); font-weight:600}
+  /* 14 дней */
+  .days{display:flex; align-items:flex-end; gap:5px; height:110px; margin-top:6px}
+  .day{flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; min-width:0}
+  .day .col{width:100%; border-radius:3px 3px 0 0; background:var(--bck); opacity:.8; transition:opacity .15s}
+  .day.today .col{background:var(--kaspi); opacity:1}
+  .day:hover .col{opacity:1}
+  .day .lbl{font-size:10px; color:var(--muted)}
+  .day .sum{font-size:10px; color:var(--muted); visibility:hidden}
+  .day:hover .sum,.day.today .sum{visibility:visible}
+  .foot{margin-top:14px; color:var(--muted); font-size:12px}
+  .empty{padding:40px 20px; text-align:center; color:var(--muted)}
+  @media (prefers-reduced-motion:no-preference){
+    .bar div,.row .track div{transition:width .5s ease}
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="empty">Подключение к данным…</div></div>
+<script src="https://work.anyq.chat/grist-plugin-api.js"></script>
+<script>
+const CH = [
+  {k:"cash",      n:"Наличные", c:"var(--cash)"},
+  {k:"kaspi",     n:"Kaspi",    c:"var(--kaspi)"},
+  {k:"halyk",     n:"Halyk",    c:"var(--halyk)"},
+  {k:"bck",       n:"БЦК",      c:"var(--bck)"},
+  {k:"deliv",     n:"Доставка", c:"var(--deliv)"},
+  {k:"other",     n:"Прочее",   c:"var(--other)"},
+];
+const DELIV = ["glovo","wolt","chocofood","yandex"];
+const DELIV_N = {glovo:"Glovo", wolt:"Wolt", chocofood:"Chocofood", yandex:"Яндекс"};
+const TZ = "Asia/Aqtobe";
+const fmt = n => new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(n);
+const dayKey = d => new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d); // YYYY-MM-DD
+const RU_D = d => new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"numeric",month:"long"}).format(d);
+
+let deps = {};      // rowId -> name
+let recs = [];
+
+function chanSums(rows){
+  const s = {cash:0,kaspi:0,halyk:0,bck:0,deliv:0,other:0,total:0};
+  for (const r of rows){
+    for (const c of ["cash","kaspi","halyk","bck","other"]) s[c]+=r[c]||0;
+    for (const c of DELIV) s.deliv+=r[c]||0;
+    s.total+=r.total||0;
+  }
+  return s;
+}
+
+function render(){
+  const app = document.getElementById("app");
+  if (!recs.length){ app.innerHTML = '<div class="empty">Пока нет данных — первый прогон синка ещё не прошёл.</div>'; return; }
+  const byDay = {};
+  for (const r of recs){
+    const k = r.date instanceof Date ? dayKey(r.date) : String(r.date);
+    (byDay[k] ||= []).push(r);
+  }
+  const days = Object.keys(byDay).sort();
+  const todayK = dayKey(new Date());
+  const curK = byDay[todayK] ? todayK : days[days.length-1];   // если сегодня пусто — последний день
+  const prevK = days[days.indexOf(curK)-1];
+  const cur = chanSums(byDay[curK]), prev = prevK ? chanSums(byDay[prevK]) : null;
+  const curDate = new Date(curK+"T12:00:00");
+  const isToday = curK===todayK;
+
+  // легенда+бар
+  const parts = CH.filter(c=>cur[c.k]>0);
+  const bar = parts.map(c=>`<div style="width:${(cur[c.k]/cur.total*100).toFixed(2)}%;background:${c.c}" title="${c.n}"></div>`).join("");
+  const delivDetail = DELIV.filter(k=>byDay[curK].some(r=>r[k]>0))
+      .map(k=>`${DELIV_N[k]} ${fmt(byDay[curK].reduce((a,r)=>a+(r[k]||0),0))}`).join(" · ");
+  const legend = parts.map(c=>{
+    const extra = c.k==="deliv"&&delivDetail ? ` title="${delivDetail}"` : "";
+    return `<span class="item"${extra}><span class="dot" style="background:${c.c}"></span>${c.n}
+      <b class="mono">${fmt(cur[c.k])}</b><span class="pct">${(cur[c.k]/cur.total*100).toFixed(0)}%</span></span>`;
+  }).join("");
+
+  let deltaHtml = "";
+  if (prev && prev.total>0){
+    const d = (cur.total-prev.total)/prev.total*100;
+    deltaHtml = `<span class="delta ${d>=0?"up":"down"}">${d>=0?"▲":"▼"} ${Math.abs(d).toFixed(1)}%</span>
+      <span class="vs">к ${RU_D(new Date(prevK+"T12:00:00"))} (${fmt(prev.total)} ₸${isToday?" за весь день":""})</span>`;
+  }
+
+  // топ точек текущего дня
+  const pts = byDay[curK].map(r=>({name:deps[r.department]||("#"+r.department), v:r.total||0}))
+      .sort((a,b)=>b.v-a.v);
+  const maxV = pts[0]?.v||1;
+  const rows = pts.map(p=>`<div class="row${p.v===0?" zero":""}">
+      <span class="name" title="${p.name}">${p.name.replace(/^Aport\d+\s*/,"")}</span>
+      <span class="track"><div style="width:${(p.v/maxV*100).toFixed(1)}%"></div></span>
+      <span class="val mono">${p.v===0?"0 — нет продаж":fmt(p.v)}</span></div>`).join("");
+
+  // 14 дней
+  const last14 = days.slice(-14);
+  const dmax = Math.max(...last14.map(k=>chanSums(byDay[k]).total),1);
+  const cols = last14.map(k=>{
+    const t = chanSums(byDay[k]).total;
+    const d = new Date(k+"T12:00:00");
+    return `<div class="day${k===todayK?" today":""}">
+      <span class="sum mono">${fmt(Math.round(t/1000))}к</span>
+      <div class="col" style="height:${Math.max(t/dmax*100,2).toFixed(1)}%" title="${RU_D(d)}: ${fmt(t)} ₸"></div>
+      <span class="lbl">${d.getDate()}</span></div>`;
+  }).join("");
+
+  const upd = recs.map(r=>r.updated_at).sort().pop() || "";
+  app.innerHTML = `
+    <div class="tape">
+      <div class="eyebrow">${isToday?"Сегодня":"Последний день"}, ${RU_D(curDate)} · ${pts.filter(p=>p.v>0).length} из ${pts.length} точек с продажами</div>
+      <div class="total mono">${fmt(cur.total)} <small>₸</small></div>
+      <div>${deltaHtml}</div>
+      <div class="bar">${bar}</div>
+      <div class="legend">${legend}</div>
+    </div>
+    <div class="grid">
+      <div class="card"><h2>Точки за ${isToday?"сегодня":RU_D(curDate)} <span>· по убыванию</span></h2><div class="rows">${rows}</div></div>
+      <div class="card"><h2>Две недели <span>· итог по дням, ₸</span></h2><div class="days">${cols}</div>
+        <div class="foot">Данные обновляются каждые 2 часа с задержкой 2 ч (защита от возвратов).${upd?` Последний синк: ${upd.slice(11,16)||upd}`:""}</div>
+      </div>
+    </div>`;
+}
+
+grist.ready({requiredAccess:"full"});
+grist.onRecords(async rows=>{
+  recs = rows;
+  try{
+    const t = await grist.docApi.fetchTable("Departments");
+    deps = {}; t.id.forEach((id,i)=>deps[id]=t.name[i]);
+  }catch(e){ /* имена подтянутся при следующем событии */ }
+  render();
+});
+</script>
+</body>
+</html>
