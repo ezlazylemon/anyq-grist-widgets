@@ -81,8 +81,11 @@
 
   .chart{display:flex; align-items:flex-end; gap:3px; height:120px; padding-top:14px; overflow-x:auto}
   .cb{flex:1 0 14px; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:14px; position:relative}
-  .cb i{display:block; width:100%; background:var(--accent); border-radius:2px 2px 0 0}
+  .cb{max-width:52px}
+  .cb i{display:block; width:100%; background:var(--line); border-radius:2px 2px 0 0}
+  .cb.insel i{background:var(--accent)}
   .cb.today i{background:var(--kaspi)}
+  .cb.insel .lbl{color:var(--ink); font-weight:600}
   .cb .lbl{font-size:10px; color:var(--muted); white-space:nowrap}
   .cb:hover::after{content:attr(data-tip); position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
     background:var(--ink); color:var(--card); font-size:11px; padding:2px 7px; border-radius:4px; white-space:nowrap; z-index:5}
@@ -255,6 +258,16 @@ function expectedCash(dk,dep){
 function modalHtml(){
   if(!modal)return"";
   const todayK=dayKey(new Date());
+  if(modal==="delcr"){
+    return `<div class="mback" data-close><div class="modal">
+      <h3>Удалить запись сдачи<button class="x" data-close aria-label="Закрыть">×</button></h3>
+      <div class="form">
+        <div class="hint widef">${esc(fv.label||"")}</div>
+        <div class="widef"><button class="btn primary" id="f-delcr">Удалить</button>
+          <button class="btn" data-close>Отмена</button>
+          <span class="msg err">${esc(uiMsg)}</span></div>
+      </div></div></div>`;
+  }
   if(modal==="exp"){
     return `<div class="mback" data-close><div class="modal">
       <h3>Новый расход<button class="x" data-close aria-label="Закрыть">×</button></h3>
@@ -346,15 +359,17 @@ function render(){
     <span class="val num">${p.v===0?"0":fmt(p.v)}</span></div>`).join("")
     ||`<div class="empty-line">Нет данных за период.</div>`;
 
+  // график всегда показывает контекст последних дней; выбранный период подсвечен
   const byDay={};
   recs.filter(r=>inSel(depId(r.department))).forEach(r=>{const k=dstr(r.date);byDay[k]=(byDay[k]||0)+(r.total||0);});
-  let dks;
-  if(period!=="all"&&len<=31){dks=[];for(let k=from;k<=to;k=addDays(k,1))dks.push(k);}
-  else dks=Object.keys(byDay).sort().slice(-30);
+  const span=Math.max(len,14);
+  const dks=[];
+  for(let k=addDays(to,-(span-1));k<=to;k=addDays(k,1))dks.push(k);
   const dmax=Math.max(...dks.map(k=>byDay[k]||0),1);
   const chart=dks.map(k=>{
     const v=byDay[k]||0,h=Math.max(Math.round(v/dmax*86),2);
-    return `<div class="cb${k===todayK?" today":""}" data-tip="${RU_D(k)}: ${fmt(v)} ₸">
+    const cls=(k===todayK?" today":"")+(k>=from&&k<=to?" insel":"");
+    return `<div class="cb${cls}" data-tip="${RU_D(k)}: ${fmt(v)} ₸">
       <i style="height:${h}px"></i><span class="lbl">${+k.slice(8)}</span></div>`;}).join("");
 
   const accRow=id=>{
@@ -499,7 +514,7 @@ function wire(){
 
   // модалка: закрытие по фону/крестику, живой пересчёт подсказки сдачи
   document.querySelectorAll("[data-close]").forEach(el=>el.addEventListener("click",e=>{
-    if(e.target===el){modal=null;uiMsg="";render();}}));
+    if(e.target===el||el.tagName==="BUTTON"){modal=null;uiMsg="";render();}}));
   if(modal==="cash"){
     // ввод обновляет только строку подсказки, без перерисовки страницы
     const upd=()=>{fv=grabForm();
@@ -544,15 +559,19 @@ function wire(){
       }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}
     };
   }
-  document.querySelectorAll("[data-delcr]").forEach(b=>b.onclick=async()=>{
+  document.querySelectorAll("[data-delcr]").forEach(b=>b.onclick=()=>{
     const id=+b.dataset.delcr;
     const r=cashrec.find(x=>x.id===id);
-    if(!confirm(`Удалить сдачу ${RU_DD(r?.dk||"")} по точке ${depName(r?.department)}?`))return;
-    b.disabled=true;
-    try{ await grist.docApi.applyUserActions([["RemoveRecord","CashReconciliation",id]]);
-      await loadAll();render();
-    }catch(e){b.disabled=false;alert("Ошибка: "+(e.message||e));}
+    modal="delcr";fv={id,label:`${RU_DD(r?.dk||"")}, ${depName(r?.department)}, ${fmt(r?.cash_actual||0)} ₸`};
+    uiMsg="";render();
   });
+  const delBtn=document.getElementById("f-delcr");
+  if(delBtn)delBtn.onclick=async()=>{
+    delBtn.disabled=true;
+    try{ await grist.docApi.applyUserActions([["RemoveRecord","CashReconciliation",fv.id]]);
+      modal=null;uiMsg="";await loadAll();render();
+    }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}
+  };
   document.querySelectorAll("[data-hand]").forEach(b=>b.onclick=()=>{
     modal="cash";uiMsg="";
     fv={date:b.dataset.day||addDays(dayKey(new Date()),-1),dep:b.dataset.hand};
@@ -571,7 +590,7 @@ function wire(){
           supplier:bill.supplier||"",note:"Оплата счёта"+(bill.request_no?" по заявке "+bill.request_no:""),
           pay_ref:bill.bill_key||String(id),created_by:"дашборд"}]]);
       await loadAll();render();
-    }catch(e){b.disabled=false;b.textContent="Оплачено";alert("Ошибка: "+(e.message||e));}
+    }catch(e){b.disabled=false;b.textContent="Оплачено";uiMsg="Ошибка: "+(e.message||e);render();}
   });
 }
 
