@@ -671,6 +671,33 @@ async function main() {
   check("без id документа метка остаётся, но без ссылки",
     h.includes(">файл<") && !h.includes("/file?doc="));
 
+  // ---- 21. отчёт о прибылях: группы, изъятия, прочие доходы ----
+  resetBackend();
+  store.ExpenseCategories = { id: [1, 2, 3, 4], name: ["Продукты", "Аренда", "Изъятие", "Возврат"],
+    pnl_group: ["Себестоимость", "Операционные", "Изъятия (не PnL)", "Прочие доходы"],
+    active: [true, true, true, true] };
+  store.Expenses = { id: [51, 52, 53, 54], date: [T0, T0, T0, T0], department: [1, 1, 1, 1],
+    category: [1, 2, 3, 4], amount: [3000, 1000, 5000, 200], account: [1, 1, 1, 1],
+    period: ["2026-09", "2026-09", "2026-09", "2026-09"],
+    source: ["казначей", "казначей", "казначей", "казначей"],
+    supplier: ["", "", "", ""], note: ["", "", "", ""], created_by: ["t", "t", "t", "t"],
+    pay_ref: ["", "", "", ""] };
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 10000, total: 10000 })]);
+  S("tab", "an");
+  h = await render();
+  check("есть отчёт о прибылях", h.includes("Прибыли и убытки"));
+  check("себестоимость показана", h.includes("Себестоимость"));
+  // 10000 выручки + 200 прочих доходов − 3000 − 1000 = 6200; изъятие 5000 не влияет
+  {
+    // fmt() ставит неразрывные пробелы — нормализуем перед поиском числа
+    const flat = h.replace(/[\s\u00A0\u202F]/g, "");
+    check("чистый доход считается без изъятий (ожидаем 6200)", flat.includes("6200"),
+      "фрагмент: " + flat.slice(flat.indexOf("Чистыйдоход"), flat.indexOf("Чистыйдоход") + 120));
+  }
+  check("изъятия показаны отдельной строкой", h.includes("Изъятия владельцев"));
+  markupSane(h, "отчёт о прибылях");
+  S("tab", "money");
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");

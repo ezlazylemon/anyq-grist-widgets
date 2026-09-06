@@ -698,6 +698,36 @@ function render(){
         <td class="num"><b>${fmt(profitRows.reduce((s,p)=>s+p.ex,0))?"−"+fmt(profitRows.reduce((s,p)=>s+p.ex,0)):"0"}</b></td>
         <td class="num"><b>${fmt(profitRows.reduce((s,p)=>s+p.net,0))}</b></td></tr>
     </table>`:`<div class="empty-line">Нет данных за период.</div>`;
+  // Отчёт о прибылях: расходы сворачиваются по видам из справочника статей.
+  // Изъятия владельцев в прибыль не входят (это распределение уже заработанного),
+  // «Прочие доходы» прибавляются к выручке — так считали в исходной постановке.
+  const PNL_ORDER=["Себестоимость","Операционные","Административные","Налоги","Инвестиции (CAPEX)"];
+  const byGroup={};
+  exp.forEach(r=>{const g=cats[r.category]?.pnl_group||"Без статьи";
+    byGroup[g]=(byGroup[g]||0)+(r.amount||0);});
+  const otherIncome=byGroup["Прочие доходы"]||0;
+  const withdrawals=byGroup["Изъятия (не PnL)"]||0;
+  const pnlCosts=PNL_ORDER.filter(g=>byGroup[g]).map(g=>({g,v:byGroup[g]}));
+  const unknownCosts=Object.keys(byGroup).filter(g=>!PNL_ORDER.includes(g)
+    &&g!=="Прочие доходы"&&g!=="Изъятия (не PnL)").map(g=>({g,v:byGroup[g]}));
+  const costsTotal=[...pnlCosts,...unknownCosts].reduce((s,x)=>s+x.v,0);
+  const pnlNet=cur.total+otherIncome-costsTotal;
+  const pnlRow=(name,val,cls="")=>`<tr><td>${esc(name)}</td><td class="num ${cls}">${fmt(val)}</td>
+    <td class="num">${cur.total?((Math.abs(val)/cur.total*100).toFixed(1)+"%"):"—"}</td></tr>`;
+  const cardPnl=`<div class="card wide" id="c-pnl"><h2>Прибыли и убытки
+        <span class="sub">${netKnown?"по внесённым расходам за период":"расходы за период не вносили"}</span></h2>
+      <table>
+        <tr><th>Показатель</th><th>Сумма, ₸</th><th>Доля выручки</th></tr>
+        ${pnlRow("Выручка",cur.total)}
+        ${otherIncome?pnlRow("Прочие доходы",otherIncome):""}
+        ${pnlCosts.map(x=>pnlRow(x.g,-x.v,"neg")).join("")}
+        ${unknownCosts.map(x=>pnlRow(x.g+" (статья без вида)",-x.v,"neg")).join("")}
+        <tr><td><b>Чистый доход</b></td><td class="num ${pnlNet>=0?"pos":"neg"}"><b>${fmt(pnlNet)}</b></td>
+          <td class="num"><b>${cur.total?((pnlNet/cur.total*100).toFixed(1)+"%"):"—"}</b></td></tr>
+        ${withdrawals?`<tr><td>Изъятия владельцев <span class="sub">не входят в прибыль</span></td>
+          <td class="num">${fmt(-withdrawals)}</td><td class="num">—</td></tr>`:""}
+      </table></div>`;
+
   const cardProfit=`<div class="card wide" id="c-profit"><h2>Прибыль по точкам
         <span class="sub">${netKnown?"выручка минус внесённые расходы":"расходы за период не вносили"}</span></h2>
         ${profitTable}</div>`;
@@ -711,7 +741,7 @@ function render(){
 
   const body=tab==="money"
     ? `<div class="grid">${cardPoints}${cardCash}${cardBills}${cardExp}</div>`
-    : `<div class="grid">${cardChart}${cardCF}${cardProfit}${cardDonutRev}${cardDonutExp}</div>`;
+    : `<div class="grid">${cardChart}${cardCF}${cardPnl}${cardProfit}${cardDonutRev}${cardDonutExp}</div>`;
 
   const errBanner=loadError?`<div class="loaderr">Не удалось прочитать данные из Grist: ${esc(loadError)}.
     Показанные цифры могут быть неполными. Обновите страницу; если не помогает, проверьте доступ виджета к документу.</div>`:"";
