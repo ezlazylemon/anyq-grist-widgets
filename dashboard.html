@@ -177,6 +177,10 @@ const DELIV=["glovo","wolt","chocofood","yandex"];
 const CATC=["#2563B8","#E2483B","#1DA860","#B98A2F","#7C5CD6","#D97706","#0E7490","#BE185D","#4D7C0F","#98A0A8"];
 const TZ="Asia/Aqtobe";
 const fmt=n=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(n);
+// сумма расхода со знаком «−»: если сумма сама отрицательна (сторно/возврат),
+// fmt() уже отдаёт "-1234" — нельзя приписывать перед ней ещё один минус,
+// иначе получается "−-1234"
+const fmtExp=n=>{n=n||0; return n<0?`+${fmt(-n)}`:`−${fmt(n)}`;};
 const dayKey=d=>new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d);
 const RU_D=k=>new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"numeric",month:"long"}).format(new Date(k+"T12:00:00"));
 const RU_DD=k=>new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"2-digit",month:"2-digit"}).format(new Date(k+"T12:00:00"));
@@ -188,6 +192,8 @@ const plural=(n,one,few,many)=>{const a=Math.abs(n)%100,b=a%10;
 
 let recs=[],deps={},depOrder=[],nameToId={},cats={},catOrder=[],accs={},accOrder=[];
 let expenses=[],bills=[],cashrec=[];
+let curExp=[];   // расходы за текущий период (без учёта поиска) — нужны поиску,
+                 // чтобы фильтровать ленту без полной перерисовки страницы
 let period="today",cFrom="",cTo="";
 let sel=new Set(), selInit=false;   // выбранные точки; по умолчанию — все, галочки стоят
 let openDD=false, modal=null, uiMsg="", fv={};
@@ -312,7 +318,7 @@ function modalHtml(){
         <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${(fv.dep?+fv.dep===id:(sel.size===1&&sel.has(id)))?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
         <label>Статья<select id="f-cat">${catOrder.map(id=>`<option value="${id}"${fv.cat==id?" selected":""}>${esc(cats[id].name)}</option>`).join("")}</select></label>
         <label>Счёт списания<select id="f-acc">${accOrder.map(id=>`<option value="${id}"${fv.acc==id?" selected":""}>${esc(accs[id].name)}</option>`).join("")}</select></label>
-        <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${fv.amt||""}" placeholder="0"></label>
+        <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${fv.amt??""}" placeholder="0"></label>
         <label>Поставщик<input type="text" id="f-sup" value="${esc(fv.sup||"")}" placeholder="необязательно"></label>
         <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note||"")}" placeholder="за что"></label>
         <div class="widef"><button class="btn primary" id="f-add">${fv.id?"Сохранить":"Записать расход"}</button>
@@ -356,13 +362,32 @@ function modalHtml(){
     <div class="form">
       <label>За какой день<input type="date" id="f-date" value="${dk}"></label>
       <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${dep===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
-      <label class="widef">Сдано фактически, ₸<input type="number" id="f-amt" min="0" step="1" value="${fv.amt||""}" placeholder="0"></label>
+      <label class="widef">Сдано фактически, ₸<input type="number" id="f-amt" min="0" step="1" value="${fv.amt??""}" placeholder="0"></label>
       <div class="hint" id="cash-hint">${hint}</div>
       ${exist?`<div class="hint" id="cash-exist">За этот день сдача уже внесена (${fmt(exist.cash_actual||0)} ₸). Запись будет обновлена.</div>`:``}
       <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note??(exist?exist.note:"")??"")}" placeholder="необязательно"></label>
       <div class="widef"><button class="btn primary" id="f-cash">${exist?"Обновить сдачу":"Записать сдачу"}</button>
         <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
     </div></div></div>`;
+}
+
+// лента расходов вынесена из render(): поиск по ней (см. wire()) обновляет
+// только эту разметку точечно, без полной перерисовки страницы на каждый
+// введённый символ — иначе набор текста в поиске дёргал тяжёлый render()
+// целиком на каждую нажатую клавишу
+function buildExpList(){
+  const q=(expQuery||"").trim().toLowerCase();
+  const expShown=(q?curExp.filter(r=>[cats[r.category]?.name,depName(r.department),r.supplier,r.note]
+      .filter(Boolean).join(" ").toLowerCase().includes(q)):curExp).slice(0,60);
+  let lastDay="";
+  return expShown.map(r=>{
+    const head=r.dk!==lastDay?(lastDay=r.dk,`<div class="nhday">${RU_D(r.dk)}</div>`):"";
+    return head+`<div class="li exp" data-editexp="${r.id}">
+      <span class="t"><b>${esc(cats[r.category]?.name||"—")}</b>
+        <div class="sub">${esc(shortName(r.department))}${r.supplier?", "+esc(r.supplier):""}${r.note?", "+esc(r.note):""}${accs[r.account]?", "+esc(accs[r.account].name):""}</div></span>
+      <span class="a num">${fmtExp(r.amount)}</span>
+      <button class="del" data-delexp="${r.id}" title="Удалить">×</button></div>`;}).join("")
+    ||`<div class="empty-line">${q?"Ничего не найдено.":"Расходов за период нет."}</div>`;
 }
 
 function render(){
@@ -537,19 +562,10 @@ function render(){
     <span class="payrow">${catSel(r.id,r.category)}${accSel(r.id)}<button class="btn primary" data-pay="${r.id}">Оплачено</button></span></div>`).join("")
     ||`<div class="empty-line">Неоплаченных счетов нет.</div>`;
 
-  // лента расходов: поиск, группировка по дням, клик по строке правит
-  const q=(expQuery||"").trim().toLowerCase();
-  const expShown=(q?exp.filter(r=>[cats[r.category]?.name,depName(r.department),r.supplier,r.note]
-      .filter(Boolean).join(" ").toLowerCase().includes(q)):exp).slice(0,60);
-  let lastDay="";
-  const expList=expShown.map(r=>{
-    const head=r.dk!==lastDay?(lastDay=r.dk,`<div class="nhday">${RU_D(r.dk)}</div>`):"";
-    return head+`<div class="li exp" data-editexp="${r.id}">
-      <span class="t"><b>${esc(cats[r.category]?.name||"—")}</b>
-        <div class="sub">${esc(shortName(r.department))}${r.supplier?", "+esc(r.supplier):""}${r.note?", "+esc(r.note):""}${accs[r.account]?", "+esc(accs[r.account].name):""}</div></span>
-      <span class="a num">−${fmt(r.amount||0)}</span>
-      <button class="del" data-delexp="${r.id}" title="Удалить">×</button></div>`;}).join("")
-    ||`<div class="empty-line">${q?"Ничего не найдено.":"Расходов за период нет."}</div>`;
+  // лента расходов: поиск, группировка по дням, клик по строке правит.
+  // curExp запоминаем для лёгкого поиска (см. buildExpList) без полной перерисовки.
+  curExp=exp;
+  const expList=buildExpList();
 
   // строка сигналов: что требует действия прямо сейчас
   const zeroPts=pts.filter(p=>p.v===0).length;
@@ -569,15 +585,15 @@ function render(){
         <div class="list">${billList}</div></div>`;
   const cardExp=`<div class="card wide" id="c-exp"><h2>Расходы <span class="sub">за период</span>
         <input type="search" id="expsearch" placeholder="Поиск" value="${esc(expQuery||"")}" style="margin-left:auto;max-width:180px">
-        <span class="cnt">${exp.length} шт, −${fmt(expSum)} ₸</span></h2>
-        <div class="list tall">${expList}</div></div>`;
+        <span class="cnt">${exp.length} шт, ${fmtExp(expSum)} ₸</span></h2>
+        <div class="list tall" id="explist">${expList}</div></div>`;
   const cardChart=`<div class="card" id="c-chart"><h2>Динамика по дням <span class="sub">₸, красный столбец: сегодня</span></h2>
         <div class="chart">${chart}</div></div>`;
   const cardCF=`<div class="card"><h2>Движение по счетам <span class="sub">оборот за период, не остаток</span></h2>
         <table><tr><th>Счёт</th><th>Приход</th><th>Расход</th><th>Оборот</th></tr>${cfRows}</table></div>`;
   const cardDonutRev=`<div class="card"><h2>Выручка по каналам <span class="cnt">${from===to?RU_D(from):RU_DD(from)+"-"+RU_DD(to)}</span></h2>
         ${chParts.length?`<div class="split">${donut(chParts,150)}${legend(chParts)}</div>`:`<div class="empty-line">Продаж нет.</div>`}</div>`;
-  const cardDonutExp=`<div class="card"><h2>Расходы по статьям <span class="cnt">−${fmt(expSum)} ₸</span></h2>
+  const cardDonutExp=`<div class="card"><h2>Расходы по статьям <span class="cnt">${fmtExp(expSum)} ₸</span></h2>
         ${catParts.length?`<div class="split">${donut(catParts,150)}${legend(catParts)}</div>`:`<div class="empty-line">Расходов за период нет.</div>`}</div>`;
 
   const body=tab==="money"
@@ -606,9 +622,31 @@ function render(){
   wire();
 }
 
+// ВАЖНО: id и служебные поля обязаны переживать пересборку формы,
+// иначе правка записи превращается в создание новой (дубли).
 const grabForm=()=>{const g=id=>document.getElementById(id);
-  return {date:g("f-date")?.value,dep:g("f-dep")?.value,cat:g("f-cat")?.value,
+  return {id:fv.id, vals:fv.vals,
+          date:g("f-date")?.value,dep:g("f-dep")?.value,cat:g("f-cat")?.value,
           acc:g("f-acc")?.value,amt:g("f-amt")?.value,sup:g("f-sup")?.value,note:g("f-note")?.value};};
+
+// правка/удаление строки ленты расходов — отдельной функцией, потому что
+// поиск (см. wire()) перестраивает только #explist и должен перепривязать
+// именно эти обработчики, не трогая остальную страницу
+function wireExpList(){
+  document.querySelectorAll("[data-editexp]").forEach(el=>el.onclick=e=>{
+    if(e.target.closest("[data-delexp]"))return;
+    const r=expenses.find(x=>x.id===+el.dataset.editexp); if(!r)return;
+    modal="exp";uiMsg="";
+    fv={id:r.id,date:r.dk,dep:r.department,cat:r.category,acc:r.account,
+        amt:r.amount,sup:r.supplier||"",note:r.note||""};
+    render();});
+  document.querySelectorAll("[data-delexp]").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const r=expenses.find(x=>x.id===+b.dataset.delexp); if(!r)return;
+    modal="delexp";uiMsg="";
+    fv={id:r.id,label:`${RU_DD(r.dk)}, ${cats[r.category]?.name||"—"}, ${fmt(r.amount||0)} ₸`};
+    render();});
+}
 
 function wire(){
  try{
@@ -616,11 +654,15 @@ function wire(){
   const cf=document.getElementById("c-from"),ct=document.getElementById("c-to");
   if(cf)cf.onchange=e=>{cFrom=e.target.value;render();};
   if(ct)ct.onchange=e=>{cTo=e.target.value;render();};
+  // #depdd рендерится всегда безусловно, но на всякий случай — как и остальные
+  // элементы ниже — привязываем защищённо, чтобы правка разметки в будущем
+  // не оборвала привязку всех последующих обработчиков (как уже было однажды)
   const dd=document.getElementById("depdd");
-  dd.addEventListener("toggle",()=>{openDD=dd.open;});
-  // живое применение: перерисовка сразу, дропдаун остаётся открытым,
-  // поиск и прокрутка списка сохраняются
-  const rerenderKeepDD=()=>{
+  if(dd){
+   dd.addEventListener("toggle",()=>{openDD=dd.open;});
+   // живое применение: перерисовка сразу, дропдаун остаётся открытым,
+   // поиск и прокрутка списка сохраняются
+   const rerenderKeepDD=()=>{
     const q=document.getElementById("depsearch")?.value||"";
     const st=dd.querySelector(".menu")?.scrollTop||0;
     render();
@@ -628,20 +670,21 @@ function wire(){
     const ds2=document.getElementById("depsearch");
     if(ds2&&q){ds2.value=q;ds2.dispatchEvent(new Event("input"));}
     const m2=dd2?.querySelector(".menu"); if(m2)m2.scrollTop=st;
-  };
-  dd.querySelectorAll("[data-dep]").forEach(cb=>cb.onchange=()=>{
+   };
+   dd.querySelectorAll("[data-dep]").forEach(cb=>cb.onchange=()=>{
     const id=+cb.dataset.dep;cb.checked?sel.add(id):sel.delete(id);
     rerenderKeepDD();});
-  const on=(sel_,fn)=>{const el=dd.querySelector(sel_); if(el)el.onclick=fn;};
-  on("[data-selall]",()=>{sel=new Set(depOrder);rerenderKeepDD();});
-  on("[data-selnone]",()=>{sel.clear();rerenderKeepDD();});
-  dd.querySelectorAll("[data-city]").forEach(b=>b.onclick=()=>{
+   const on=(sel_,fn)=>{const el=dd.querySelector(sel_); if(el)el.onclick=fn;};
+   on("[data-selall]",()=>{sel=new Set(depOrder);rerenderKeepDD();});
+   on("[data-selnone]",()=>{sel.clear();rerenderKeepDD();});
+   dd.querySelectorAll("[data-city]").forEach(b=>b.onclick=()=>{
     sel=new Set(depOrder.filter(id=>deps[id]?.city===b.dataset.city));rerenderKeepDD();});
-  const ds=document.getElementById("depsearch");
-  if(ds)ds.oninput=()=>{
+   const ds=document.getElementById("depsearch");
+   if(ds)ds.oninput=()=>{
     const q=ds.value.trim().toLowerCase();
     dd.querySelectorAll("label[data-nm]").forEach(l=>{
       l.style.display=!q||l.dataset.nm.includes(q)?"":"none";});};
+  }
   // элементы могут отсутствовать (модалка, другая вкладка) — привязываем безопасно
   const bind=(id,fn)=>{const el=document.getElementById(id); if(el)el.onclick=fn;};
   bind("btn-exp",()=>{modal="exp";fv={};uiMsg="";render();});
@@ -653,9 +696,11 @@ function wire(){
     setTimeout(()=>document.getElementById(b.dataset.goto)?.scrollIntoView({behavior:"smooth",block:"start"}),30);});
   const es=document.getElementById("expsearch");
   if(es)es.oninput=()=>{expQuery=es.value;
-    const pos=es.selectionStart;render();
-    const e2=document.getElementById("expsearch");
-    if(e2){e2.focus();e2.setSelectionRange(pos,pos);}};
+    // точечное обновление ленты расходов вместо полной перерисовки страницы —
+    // иначе каждый введённый символ дёргал тяжёлый render() целиком
+    const list=document.getElementById("explist");
+    if(list){list.innerHTML=buildExpList();wireExpList();}
+    else render();};
 
   // модалка: закрытие по фону/крестику, живой пересчёт подсказки сдачи
   document.querySelectorAll("[data-close]").forEach(el=>el.addEventListener("click",e=>{
@@ -736,19 +781,7 @@ function wire(){
       }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}
     };
   }
-  document.querySelectorAll("[data-editexp]").forEach(el=>el.onclick=e=>{
-    if(e.target.closest("[data-delexp]"))return;
-    const r=expenses.find(x=>x.id===+el.dataset.editexp); if(!r)return;
-    modal="exp";uiMsg="";
-    fv={id:r.id,date:r.dk,dep:r.department,cat:r.category,acc:r.account,
-        amt:r.amount,sup:r.supplier||"",note:r.note||""};
-    render();});
-  document.querySelectorAll("[data-delexp]").forEach(b=>b.onclick=e=>{
-    e.stopPropagation();
-    const r=expenses.find(x=>x.id===+b.dataset.delexp); if(!r)return;
-    modal="delexp";uiMsg="";
-    fv={id:r.id,label:`${RU_DD(r.dk)}, ${cats[r.category]?.name||"—"}, ${fmt(r.amount||0)} ₸`};
-    render();});
+  wireExpList();
   const delExpBtn=document.getElementById("f-delexp");
   if(delExpBtn)delExpBtn.onclick=async()=>{
     delExpBtn.disabled=true;
