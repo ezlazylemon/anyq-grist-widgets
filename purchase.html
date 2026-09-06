@@ -578,7 +578,12 @@ function wire(){
     }catch(e){b.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}});
   document.querySelectorAll("[data-received]").forEach(b=>b.onclick=async()=>{
     b.disabled=true;
-    try{ await grist.docApi.applyUserActions([["UpdateRecord","Purchase_requests",+b.dataset.received,{Is_received:true,Status:"Received"}]]);
+    const rid=+b.dataset.received;
+    // Is_received — формула по позициям, поэтому отмечаем доставку у позиций
+    const own=items.filter(i=>i.Request_ID===rid);
+    const acts=own.map(i=>["UpdateRecord","Purchase_Request_Items",i.id,{Is_delivered:true}]);
+    acts.push(["UpdateRecord","Purchase_requests",rid,{Status:"Received"}]);
+    try{ await grist.docApi.applyUserActions(acts);
       await loadAll();render();
     }catch(e){b.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}});
 
@@ -632,10 +637,12 @@ function wire(){
     const validItems=(fv.itemsList||[]).filter(it=>(it.name||"").trim());
     const total=validItems.reduce((s,it)=>s+rowTotal(it),0);
     const curReq=fv.id?reqs.find(r=>r.id===+fv.id):null;
+    // В Purchase_requests пять колонок вычисляемые: PR_Number, Total_amount,
+    // Is_paid, Is_received, Suppliers_list — Grist считает их из позиций сам.
+    // Писать в них нельзя: «Can't save value to formula column».
     const reqFields={department_ref:depId,Requested_by:(fv.by||"").trim(),
       Priority:fv.priority||"Планово",Expected_date:epoch(fv.ed||dayKey(new Date())),
-      Status:fv.status||"Pending",Total_amount:Math.round(total*100)/100};
-    if(!curReq||!curReq.PR_Number)reqFields.PR_Number=nextPRNumber();
+      Status:fv.status||"Pending"};
     try{
       let reqId;
       if(fv.id){
