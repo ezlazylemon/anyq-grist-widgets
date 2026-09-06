@@ -585,6 +585,31 @@ async function main() {
   markupSane(h, "нет точек продаж (depOrder пуст)");
   check("нет точек продаж: показано «Нет данных за период»", h.includes("Нет данных за период"));
 
+  // ---- 15. свежесть данных: чип предупреждает об отставшем обмене ----
+  resetBackend();
+  const twoHours = 2 * 60 * 60 * 1000;
+  const freshCut = new Date(Date.now() - twoHours + 5 * 60000).toISOString();
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000, last_sync_upper: freshCut })]);
+  h = await render();
+  check("свежий обмен: чип без тревоги", h.includes("Обновлено в") && !h.includes("отстал"));
+  const staleCut = new Date(Date.now() - twoHours - 3 * 60 * 60000).toISOString();
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000, last_sync_upper: staleCut })]);
+  h = await render();
+  check("отставший обмен: чип предупреждает", h.includes("Обмен с iiko отстал"));
+  markupSane(h, "чип свежести данных");
+
+  // ---- 16. клик по точке фильтрует на неё и обратно ----
+  resetBackend();
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 3000, total: 3000 }),
+                   mkRevRow(2, T0, 2, { cash: 2000, total: 2000 })]);
+  h = await render();
+  check("строки точек кликабельны", h.includes('data-point="1"'));
+  fireClick(document.querySelector('[data-point="1"]')); await render();
+  check("клик по точке оставил только её", G("sel").size === 1 && G("sel").has(1));
+  fireClick(document.querySelector('[data-point="1"]')); await render();
+  check("повторный клик вернул все точки", G("sel").size > 1);
+  markupSane(document.getElementById("app").innerHTML, "клик по точке");
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");
