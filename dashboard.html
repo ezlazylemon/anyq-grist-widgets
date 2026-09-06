@@ -151,13 +151,13 @@ const epoch=k=>Math.floor(Date.UTC(+k.slice(0,4),+k.slice(5,7)-1,+k.slice(8,10))
 let recs=[],deps={},depOrder=[],nameToId={},cats={},catOrder=[],accs={},accOrder=[];
 let expenses=[],bills=[],cashrec=[];
 let period="today",cFrom="",cTo="";
-let sel=new Set();
+let sel=new Set(), selInit=false;   // выбранные точки; по умолчанию — все, галочки стоят
 let openDD=false, modal=null, uiMsg="", fv={};
 
 const depId=v=>typeof v==="number"?v:(Array.isArray(v)?(+v[v.length-1]||0):(nameToId[String(v)]||0));
 const depName=id=>deps[id]?.name||("#"+id);
 const shortName=id=>depName(id);
-const inSel=id=>!sel.size||sel.has(id);
+const inSel=id=>sel.has(id);
 const cols=t=>{const ks=Object.keys(t),n=t.id.length,out=[];
   for(let i=0;i<n;i++){const o={};ks.forEach(k=>o[k]=t[k][i]);out.push(o);}return out;};
 const dstr=v=>v instanceof Date?dayKey(v):(typeof v==="number"?dayKey(new Date(v*1000)):String(v||""));
@@ -175,6 +175,7 @@ async function loadAll(){
   expenses=cols(e).map(r=>({...r,dk:dstr(r.date)})).sort((x,y)=>y.dk.localeCompare(x.dk)||y.id-x.id);
   bills=cols(b).map(r=>({...r,dk:dstr(r.date_added)}));
   cashrec=cols(cr).map(r=>({...r,dk:dstr(r.date)})).sort((x,y)=>y.dk.localeCompare(x.dk)||y.id-x.id);
+  if(!selInit&&depOrder.length){sel=new Set(depOrder);selInit=true;}
 }
 
 function range(){
@@ -233,7 +234,7 @@ function modalHtml(){
       <h3>Новый расход<button class="x" data-close aria-label="Закрыть">×</button></h3>
       <div class="form">
         <label>Дата<input type="date" id="f-date" value="${fv.date||todayK}"></label>
-        <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${(fv.dep?+fv.dep===id:sel.size===1&&sel.has(id))?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
+        <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${(fv.dep?+fv.dep===id:(sel.size===1&&sel.has(id)))?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
         <label>Статья<select id="f-cat">${catOrder.map(id=>`<option value="${id}"${fv.cat==id?" selected":""}>${esc(cats[id].name)}</option>`).join("")}</select></label>
         <label>Счёт списания<select id="f-acc">${accOrder.map(id=>`<option value="${id}"${fv.acc==id?" selected":""}>${esc(accs[id].name)}</option>`).join("")}</select></label>
         <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${fv.amt||""}" placeholder="0"></label>
@@ -248,12 +249,12 @@ function modalHtml(){
   const dep=+(fv.dep||((sel.size===1&&[...sel][0])||depOrder[0]));
   const expd=expectedCash(dk,dep);
   const act=parseFloat(fv.amt);
-  let hint=`Ожидается по данным: <b class="num">${fmt(expd)} ₸</b> (наличная выручка минус расходы из кассы за ${RU_DD(dk)})`;
+  let hint=`Ожидается за ${RU_DD(dk)}: <b class="num">${fmt(expd)} ₸</b>`;
   if(!isNaN(act)){
     const d=Math.round((act-expd)*100)/100;
-    hint+= d===0?` — <b class="pos">сойдётся ровно</b>`
-      : d>0?` — получится <b class="pos">излишек +${fmt(d)} ₸</b>`
-           :` — получится <b class="neg">недосдача −${fmt(-d)} ₸</b>`;
+    hint+= d===0?`. <b class="pos">Сойдётся ровно</b>`
+      : d>0?`. Излишек: <b class="pos">+${fmt(d)} ₸</b>`
+           :`. Недосдача: <b class="neg">−${fmt(-d)} ₸</b>`;
   }
   return `<div class="mback" data-close><div class="modal">
     <h3>Сдача наличных<button class="x" data-close aria-label="Закрыть">×</button></h3>
@@ -287,20 +288,26 @@ function render(){
     dHtml=`<span class="d ${d>=0?"up":"down"}">${d>=0?"+":"−"}${Math.abs(d).toFixed(1)}% к пред. периоду</span>`;}
 
   const pills=PERIODS.map(([k,n])=>`<button class="pill${period===k?" on":""}" data-p="${k}">${n}</button>`).join("");
-  const custom=period==="custom"?`<span class="range">
-      <input type="date" id="c-from" value="${cFrom||from}"> —
+  const custom=period==="custom"?`<span class="range">с
+      <input type="date" id="c-from" value="${cFrom||from}"> по
       <input type="date" id="c-to" value="${cTo||to}"></span>`:"";
-  const depLabel=!sel.size?"Точки: все":(sel.size===1?depName([...sel][0]):`Точки: ${sel.size}`);
+  const depLabel=sel.size===depOrder.length?"Точки: все"
+    :sel.size===0?"Точки: ни одной"
+    :sel.size===1?depName([...sel][0]):`Точки: ${sel.size} из ${depOrder.length}`;
   const menu=`<div class="menu">
     <input type="search" id="depsearch" placeholder="Поиск точки" style="width:100%;margin-bottom:6px">
     <div class="tools"><button data-selall>Все точки</button></div>`+
     depOrder.map(id=>`<label data-nm="${esc(depName(id).toLowerCase())}"><input type="checkbox" data-dep="${id}"${sel.has(id)?" checked":""}>${esc(depName(id))}</label>`).join("")+`</div>`;
 
+  const cover=expSum>0?cur.total/expSum*100:null;
   const kpis=`<div class="kpis">
     <div class="kpi"><div class="t">Выручка</div><div class="v num">${fmt(cur.total)} ₸</div>${dHtml}</div>
     <div class="kpi"><div class="t">Расходы</div><div class="v num">${fmt(expSum)} ₸</div><span class="d mut">${exp.length} операций</span></div>
     <div class="kpi"><div class="t">Чистый доход</div><div class="v num ${net>=0?"pos":"neg"}">${fmt(net)} ₸</div>
-      <span class="d mut">выручка − расходы</span></div>
+      ${net>=0?`<span class="d up">в плюсе</span>`:`<span class="d down">до нуля не хватает ${fmt(-net)} ₸</span>`}</div>
+    <div class="kpi"><div class="t">Ноль (порог выручки)</div><div class="v num">${fmt(expSum)} ₸</div>
+      ${cover===null?`<span class="d mut">расходов нет</span>`
+        :`<span class="d ${cover>=100?"up":"down"}">покрыто на ${cover.toFixed(0)}%</span>`}</div>
   </div>`;
 
   const chParts=CH.filter(c=>cur[c.k]>0).map(c=>({v:cur[c.k],c:c.c,label:c.n}));
@@ -316,7 +323,7 @@ function render(){
   const ptRows=pts.map(p=>`<div class="row${p.v===0?" zero":""}">
     <span class="name" title="${esc(depName(p.id))}">${esc(shortName(p.id))}</span>
     <span class="track"><i style="width:${(p.v/maxV*100).toFixed(1)}%"></i></span>
-    <span class="val num">${p.v===0?"0 — нет продаж":fmt(p.v)}</span></div>`).join("")
+    <span class="val num">${p.v===0?"0":fmt(p.v)}</span></div>`).join("")
     ||`<div class="empty-line">Нет данных за период.</div>`;
 
   const byDay={};
@@ -355,7 +362,7 @@ function render(){
       <span class="t"><b>${esc(shortName(r.department))}</b>
         <div class="sub">ожидалось ${fmt(r.cash_expected||0)}, сдано ${fmt(r.cash_actual||0)}${r.note?", "+esc(r.note):""}</div></span>
       ${badge}</div>`;}).join("")
-    ||`<div class="empty-line">Сдач за период нет. Кнопка «Сдача наличных» — сверху.</div>`;
+    ||`<div class="empty-line">Сдач за период нет.</div>`;
   // точки с наличной выручкой за вчера без сдачи
   const yk=addDays(todayK,-1);
   const cashYest={};
@@ -380,7 +387,7 @@ function render(){
     <span class="t"><b>${esc(cats[r.category]?.name||"—")}</b>
       <div class="sub">${esc(shortName(r.department))}${r.supplier?", "+esc(r.supplier):""}${r.note?", "+esc(r.note):""}</div></span>
     <span class="a num">−${fmt(r.amount||0)}</span></div>`).join("")
-    ||`<div class="empty-line">Расходов за период нет — кнопка «+ Расход» сверху.</div>`;
+    ||`<div class="empty-line">Расходов за период нет.</div>`;
 
   app.innerHTML=`
     <div class="toolbar">
@@ -393,20 +400,18 @@ function render(){
     </div>
     ${kpis}
     <div class="grid">
-      <div class="card"><h2>Выручка по каналам <span class="cnt">${from===to?RU_D(from):RU_DD(from)+" – "+RU_DD(to)}</span></h2>
-        ${chParts.length?`<div class="split">${donut(chParts,150)}${legend(chParts)}</div>`:`<div class="empty-line">Продаж за период нет.</div>`}</div>
+      <div class="card"><h2>Выручка по каналам <span class="cnt">${from===to?RU_D(from):RU_DD(from)+"-"+RU_DD(to)}</span></h2>
+        ${chParts.length?`<div class="split">${donut(chParts,150)}${legend(chParts)}</div>`:`<div class="empty-line">Продаж нет.</div>`}</div>
       <div class="card"><h2>Расходы по статьям <span class="cnt">−${fmt(expSum)} ₸</span></h2>
         ${catParts.length?`<div class="split">${donut(catParts,150)}${legend(catParts)}</div>`:`<div class="empty-line">Расходов за период нет.</div>`}</div>
       <div class="card"><h2>Точки <span class="sub">выручка за период</span><span class="cnt">${pts.filter(p=>p.v>0).length} из ${pts.length} с продажами</span></h2>
         <div class="rows">${ptRows}</div></div>
-      <div class="card"><h2>Динамика по дням <span class="sub">₸</span></h2>
-        <div class="chart">${chart}</div>
-        <div class="foot">Синк из iiko каждые 2 часа, лаг 2 ч. Красный столбец — сегодня (день ещё идёт).</div></div>
+      <div class="card"><h2>Динамика по дням <span class="sub">₸, красный столбец: сегодня</span></h2>
+        <div class="chart">${chart}</div></div>
       <div class="card"><h2>Сверка касс <span class="sub">факт против ожидания</span><span class="cnt">${crs.length} записей</span></h2>
         <div class="list">${crList}</div>${nhLine}</div>
       <div class="card"><h2>Cashflow по счетам <span class="sub">за период</span></h2>
-        <table><tr><th>Счёт</th><th>Приход</th><th>Расход</th><th>Нетто</th></tr>${cfRows}</table>
-        <div class="foot">Приход — по каналам оплат (агрегаторы падают в свои банки).</div></div>
+        <table><tr><th>Счёт</th><th>Приход</th><th>Расход</th><th>Нетто</th></tr>${cfRows}</table></div>
       <div class="card"><h2>Счета к оплате<span class="cnt">${unpaid.length} шт · ${fmt(unpaid.reduce((a,r)=>a+(r.amount||0),0))} ₸</span></h2>
         <div class="list">${billList}</div></div>
       <div class="card"><h2>Расходы <span class="sub">за период, новые сверху</span><span class="cnt">${exp.length} шт · −${fmt(expSum)} ₸</span></h2>
@@ -441,7 +446,7 @@ function wire(){
   dd.querySelectorAll("[data-dep]").forEach(cb=>cb.onchange=()=>{
     const id=+cb.dataset.dep;cb.checked?sel.add(id):sel.delete(id);
     rerenderKeepDD();});
-  dd.querySelector("[data-selall]").onclick=()=>{sel.clear();rerenderKeepDD();};
+  dd.querySelector("[data-selall]").onclick=()=>{sel=new Set(depOrder);rerenderKeepDD();};
   const ds=document.getElementById("depsearch");
   if(ds)ds.oninput=()=>{
     const q=ds.value.trim().toLowerCase();
