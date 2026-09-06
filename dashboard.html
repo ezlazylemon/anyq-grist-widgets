@@ -625,9 +625,10 @@ function wire(){
     const q=ds.value.trim().toLowerCase();
     dd.querySelectorAll("label[data-nm]").forEach(l=>{
       l.style.display=!q||l.dataset.nm.includes(q)?"":"none";});};
-  document.getElementById("btn-refresh").onclick=async()=>{await loadAll();render();};
-  document.getElementById("btn-exp").onclick=()=>{modal="exp";fv={};uiMsg="";render();};
-  document.getElementById("btn-cash").onclick=()=>{modal="bulk";fv={vals:{}};uiMsg="";render();};
+  // элементы могут отсутствовать (модалка, другая вкладка) — привязываем безопасно
+  const bind=(id,fn)=>{const el=document.getElementById(id); if(el)el.onclick=fn;};
+  bind("btn-exp",()=>{modal="exp";fv={};uiMsg="";render();});
+  bind("btn-cash",()=>{modal="bulk";fv={vals:{}};uiMsg="";render();});
   document.querySelectorAll(".pills.tabs .pill").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();});
   document.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>{
     if(tab!=="money"&&["c-chart"].includes(b.dataset.goto)===false){tab="money";render();}
