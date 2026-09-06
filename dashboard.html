@@ -370,7 +370,9 @@ function render(){
     ||`<tr><td colspan="4" class="empty-line" style="text-align:left">Нет движения за период.</td></tr>`;
 
   // сверка касс: записи за период (по дате сдачи) + бейдж
-  const crs=cashrec.filter(r=>r.dk>=from&&r.dk<=to&&inSel(r.department)).slice(0,20);
+  // сдачи не привязаны к выбранному периоду: их вносят за прошлые дни
+  const crAll=cashrec.filter(r=>inSel(r.department));
+  const crs=crAll.slice(0,20);
   const crList=crs.map(r=>{
     const d=r.diff||0;
     const badge=d===0?`<span class="badge zero">сошлось</span>`
@@ -380,7 +382,7 @@ function render(){
       <span class="t"><b>${esc(shortName(r.department))}</b>
         <div class="sub">ожидалось ${fmt(r.cash_expected||0)}, сдано ${fmt(r.cash_actual||0)}${r.note?", "+esc(r.note):""}</div></span>
       ${badge}<button class="del" data-delcr="${r.id}" title="Удалить запись">×</button></div>`;}).join("")
-    ||`<div class="empty-line">Сдач за период нет.</div>`;
+    ||`<div class="empty-line">Сдач ещё не вносили. Раскройте список ниже и нажмите «Внести».</div>`;
   // несданная касса за ВСЕ закрытые дни (сегодня не считаем, день идёт)
   const cashByDay={};   // day -> {depId: cash}
   recs.forEach(r=>{
@@ -444,7 +446,7 @@ function render(){
         <div class="rows">${ptRows}</div></div>
       <div class="card"><h2>Динамика по дням <span class="sub">₸, красный столбец: сегодня</span></h2>
         <div class="chart">${chart}</div></div>
-      <div class="card"><h2>Сверка касс <span class="sub">факт против ожидания</span><span class="cnt">${crs.length} записей</span></h2>
+      <div class="card"><h2>Сверка касс <span class="sub">последние сдачи</span><span class="cnt">${crAll.length?`всего ${crAll.length}`:""}</span></h2>
         <div class="list">${crList}</div>${nhLine}</div>
       <div class="card"><h2>Cashflow по счетам <span class="sub">за период</span></h2>
         <table><tr><th>Счёт</th><th>Приход</th><th>Расход</th><th>Нетто</th></tr>${cfRows}</table></div>
