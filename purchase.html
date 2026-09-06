@@ -72,6 +72,7 @@
   .form label{display:flex; flex-direction:column; gap:2px; font-size:12px; color:var(--muted)}
   .form label>*{width:100%}
   .hint{grid-column:1/-1; font-size:12px; color:var(--muted); background:var(--hover); border-radius:5px; padding:6px 9px}
+  .hint.warn{background:var(--down-bg); color:var(--down); font-weight:600}
   .msg{font-size:12px; margin-left:8px}
   .msg.ok{color:var(--up)} .msg.err{color:var(--down)}
   .empty{padding:40px 20px; text-align:center; color:var(--muted)}
@@ -142,6 +143,27 @@ function reqBySupplier(reqId){
 const billedFor=(reqId,sid)=>bills.filter(b=>b.request===reqId&&(sid===undefined||b.supplier===sid))
   .reduce((s,b)=>s+(b.amount||0),0);
 
+// Дубль и переплата: счёт по паре «заявка + поставщик» уже может быть,
+// а сумма счетов может превысить позиции поставщика в заявке. Не запрещаем
+// (бывают предоплата и доплата), но требуем осознанного подтверждения.
+function billWarning(f){
+  const reqId=+f.req||0, sid=+f.sup||0, amt=parseFloat(f.amt)||0;
+  if(!reqId)return "";
+  const others=bills.filter(b=>b.request===reqId&&b.supplier===sid&&b.id!==f.id);
+  const parts=reqBySupplier(reqId);
+  const planned=(parts.find(p=>p.sid===sid)||{}).sum||0;
+  const already=others.reduce((s,b)=>s+(b.amount||0),0);
+  const msgs=[];
+  if(others.length){
+    const list=others.map(b=>`${fmt(b.amount)} ₸ от ${RU_DD(b.dk)}${b.paid?", оплачен":b.ready?", у казначея":""}`).join("; ");
+    msgs.push(`По этому поставщику в заявке уже есть ${others.length===1?"счёт":"счета"}: ${list}.`);
+  }
+  if(planned&&amt&&already+amt>planned+0.5){
+    msgs.push(`Сумма счетов превысит позиции поставщика в заявке на ${fmt(already+amt-planned)} ₸ (в заявке ${fmt(planned)} ₸).`);
+  }
+  return msgs.join(" ");
+}
+
 function billStatus(b){
   if(b.paid)return {cls:"ok",txt:"оплачен"};
   if(b.ready)return {cls:"wait",txt:b.synced?"у казначея":"к оплате"};
@@ -175,8 +197,9 @@ function modalHtml(){
               return `<button type="button" class="btn sm" data-part="${p.sid}" data-sum="${p.sum}">${esc(supName(p.sid)||"без поставщика")}: ${fmt(p.sum)}${b?" (выставлено "+fmt(b)+")":""}</button>`;}).join(" ")+`</div>`:"";
           return `<div class="hint">Заявка на ${fmt(reqTotal(linkedReq))} ₸, статус: ${esc(linkedReq.Status||"—")}.
             ${done?`Уже выставлено счетов: ${fmt(done)} ₸, остаток ${fmt(rest)} ₸.`:"Счетов по ней ещё нет."}${bySup}</div>`;})():""}
+        ${(()=>{const w=billWarning(fv); return w?`<div class="hint warn">${w}</div>`:"";})()}
         <div class="widef">
-          <button class="btn primary" id="f-save">${fv.id?"Сохранить":"Создать"}</button>
+          <button class="btn primary" id="f-save">${billWarning(fv)&&!fv.force?"Всё равно создать":(fv.id?"Сохранить":"Создать")}</button>
           <button class="btn ghost" id="f-saveready">${fv.id?"Сохранить и отправить":"Создать и отправить"}</button>
           <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
       </div></div></div>`;
@@ -212,9 +235,12 @@ function render(){
   const billRow=b=>{
     const st=billStatus(b);
     const req=b.request?reqs.find(r=>r.id===b.request):null;
+    // счета-двойники по паре «заявка + поставщик» видны сразу, без открытия окна
+    const twins=b.request?bills.filter(x=>x.request===b.request&&x.supplier===b.supplier):[];
+    const dup=twins.length>1?`<span class="badge late" title="${esc(twins.map(x=>fmt(x.amount)+' ₸ от '+RU_DD(x.dk)).join('; '))}">дубль ${twins.findIndex(x=>x.id===b.id)+1} из ${twins.length}</span>`:"";
     return `<div class="li">
       <span class="d num">${RU_DD(b.dk)}</span>
-      <span class="t"><b>${esc(b.supplier_name||supName(b.supplier)||"Поставщик")}</b>
+      <span class="t"><b>${esc(b.supplier_name||supName(b.supplier)||"Поставщик")}</b> ${dup}
         <div class="sub">${esc(depName(b.department))}${req?", заявка "+esc(String(req.PR_Number||req.id)):""}${b.note?", "+esc(b.note):""}</div></span>
       <span class="a num">${fmt(b.amount)}</span>
       <span class="badge ${st.cls}">${st.txt}</span>
@@ -367,8 +393,10 @@ function wire(){
     }catch(e){b.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}});
 
   // при выборе заявки перерисовываем окно: появятся её поставщики и остаток
-  const rq=document.getElementById("f-req");
-  if(rq)rq.onchange=()=>{fv=grab();render();};
+  // смена заявки, поставщика или суммы сбрасывает подтверждение и обновляет предупреждение
+  ["f-req","f-sup","f-amt"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.onchange=()=>{fv=grab();fv.force=false;render();};});
   document.querySelectorAll("[data-part]").forEach(b=>b.onclick=()=>{
     fv=grab();fv.sup=b.dataset.part;fv.amt=b.dataset.sum;
     const nm=supName(+b.dataset.part);
@@ -377,9 +405,17 @@ function wire(){
     render();});
 
   const save=async ready=>{
-    fv=grab();
+    const force=fv.force;
+    fv=grab(); fv.force=force;
     const amt=parseFloat(fv.amt);
     if(!amt||amt<=0){uiMsg="Ошибка: введите сумму";render();return;}
+    // первый клик при дубле/переплате только предупреждает, второй — создаёт
+    const warn=billWarning(fv);
+    if(warn&&!fv.force){
+      fv.force=true;
+      uiMsg="Проверьте предупреждение выше. Нажмите ещё раз, если счёт всё равно нужен.";
+      render();return;
+    }
     const dk=fv.date||dayKey(new Date());
     const flds={date_added:epoch(dk),department:+fv.dep,supplier:+fv.sup||0,
       supplier_name:supName(+fv.sup)||"",request:+fv.req||0,amount:amt,
