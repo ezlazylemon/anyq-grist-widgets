@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Закупки APORT</title>
+<style>
+  :root{
+    --bg:#F1F2F4; --card:#FFFFFF; --ink:#1F2328; --muted:#68707A; --line:#D9DDE2;
+    --accent:#2563B8; --up:#188A50; --down:#C6402E; --warn:#B45309;
+    --input:#FFFFFF; --hover:#F4F6F8; --up-bg:#E5F4EC; --down-bg:#FBEAE7; --warn-bg:#FDF3E3;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#17191C; --card:#1F2226; --ink:#E8EAEC; --muted:#8C939B; --line:#33383E;
+           --input:#191C1F; --hover:#262A2F; --up-bg:#173226; --down-bg:#3A211D; --warn-bg:#33270F; }
+  }
+  *{box-sizing:border-box; margin:0}
+  body{background:var(--bg); color:var(--ink);
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    font-size:13px; line-height:1.4; padding:12px 14px 22px}
+  .num{font-variant-numeric:tabular-nums}
+  h2{font-size:13px; font-weight:600; margin-bottom:8px; display:flex; align-items:baseline; gap:8px}
+  h2 .sub{color:var(--muted); font-weight:400; font-size:12px}
+  h2 .cnt{margin-left:auto; color:var(--muted); font-weight:400; font-size:12px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:6px; padding:12px 14px}
+  button{font:inherit; cursor:pointer}
+  select,input{font:inherit; color:var(--ink); background:var(--input);
+    border:1px solid var(--line); border-radius:5px; padding:5px 8px; max-width:100%}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  .toolbar{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:10px}
+  .pills{display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--card)}
+  .pill{border:0; border-right:1px solid var(--line); background:transparent; color:var(--ink); padding:6px 11px}
+  .pill:last-child{border-right:0}
+  .pill.on{background:var(--ink); color:var(--card)}
+  .btn{border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:6px; padding:6px 11px}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600}
+  .btn.ghost{color:var(--accent); border-color:var(--accent)}
+  .btn.sm{padding:3px 9px; font-size:12px}
+  .btn:disabled{opacity:.5; cursor:default}
+  .spacer{flex:1}
+  .signals{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
+  .chip{border:1px solid var(--line); background:var(--card); color:var(--muted);
+    border-radius:20px; padding:5px 12px; font-size:12px}
+  .chip.alert{border-color:var(--warn); background:var(--warn-bg); color:var(--warn); font-weight:600}
+  .grid{display:grid; gap:10px; grid-template-columns:1fr 1fr}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  .grid .wide{grid-column:1/-1}
+  .list{display:flex; flex-direction:column; max-height:460px; overflow:auto}
+  .li{display:flex; gap:9px; align-items:baseline; padding:7px 2px; border-top:1px solid var(--line)}
+  .li:first-child{border-top:0}
+  .li .d{color:var(--muted); font-size:12px; flex:none; width:42px}
+  .li .t{flex:1; min-width:0}
+  .li .t .sub{color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .li .a{font-weight:600; white-space:nowrap}
+  .li .acts{display:flex; gap:5px; flex:none}
+  .empty-line{color:var(--muted); padding:12px 2px}
+  .badge{font-size:11px; font-weight:600; border-radius:4px; padding:2px 7px; white-space:nowrap}
+  .badge.wait{background:var(--warn-bg); color:var(--warn)}
+  .badge.ok{background:var(--up-bg); color:var(--up)}
+  .badge.draft{background:var(--hover); color:var(--muted)}
+  .badge.late{background:var(--down-bg); color:var(--down)}
+  .del{border:0; background:none; color:var(--muted); font-size:16px; line-height:1; padding:0 2px}
+  .del:hover{color:var(--down)}
+  .mback{position:fixed; inset:0; background:rgba(15,17,20,.45); z-index:50;
+    display:flex; align-items:flex-start; justify-content:center; padding:40px 14px}
+  .modal{background:var(--card); border:1px solid var(--line); border-radius:8px;
+    width:100%; max-width:480px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .modal h3{font-size:14px; margin-bottom:10px; display:flex}
+  .modal h3 .x{margin-left:auto; border:0; background:none; color:var(--muted); font-size:18px; line-height:1; padding:0 2px}
+  .form{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .form .widef{grid-column:1/-1}
+  .form label{display:flex; flex-direction:column; gap:2px; font-size:12px; color:var(--muted)}
+  .form label>*{width:100%}
+  .hint{grid-column:1/-1; font-size:12px; color:var(--muted); background:var(--hover); border-radius:5px; padding:6px 9px}
+  .msg{font-size:12px; margin-left:8px}
+  .msg.ok{color:var(--up)} .msg.err{color:var(--down)}
+  .empty{padding:40px 20px; text-align:center; color:var(--muted)}
+  table{width:100%; border-collapse:collapse}
+  th{font-size:11px; color:var(--muted); font-weight:500; text-align:right; padding:3px 6px; border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:4px 6px; text-align:right; border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:0}
+</style>
+</head>
+<body>
+<div id="app"><div class="empty">Загрузка данных…</div></div>
+<script src="https://work.anyq.chat/grist-plugin-api.js"></script>
+<script>
+"use strict";
+const TZ="Asia/Aqtobe";
+const fmt=n=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(n||0);
+const dayKey=d=>new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d);
+const RU_DD=k=>k?new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"2-digit",month:"2-digit"}).format(new Date(k+"T12:00:00")):"";
+const RU_D=k=>k?new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,day:"numeric",month:"long"}).format(new Date(k+"T12:00:00")):"";
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const epoch=k=>Math.floor(Date.UTC(+k.slice(0,4),+k.slice(5,7)-1,+k.slice(8,10))/1000);
+const dstr=v=>v instanceof Date?dayKey(v):(typeof v==="number"&&v?dayKey(new Date(v*1000)):"");
+const cols=t=>{const ks=Object.keys(t),n=t.id.length,out=[];
+  for(let i=0;i<n;i++){const o={};ks.forEach(k=>o[k]=t[k][i]);out.push(o);}return out;};
+
+let reqs=[],items=[],sups={},supOrder=[],deps={},depOrder=[],bills=[];
+let tab="bills", modal=null, fv={}, uiMsg="", noBills=false;
+
+const depName=id=>deps[id]?.name||"";
+const supName=id=>sups[id]?.Name||"";
+
+async function loadAll(){
+  const get=async t=>{try{return await grist.docApi.fetchTable(t);}catch(e){return null;}};
+  const [pr,pi,su,de,bi]=await Promise.all(
+    ["Purchase_requests","Purchase_Request_Items","Suppliers","Departments","Bills"].map(get));
+  reqs=pr?cols(pr).map(r=>({...r,ed:dstr(r.Expected_date),cd:dstr(r.Created_at)})):[];
+  items=pi?cols(pi):[];
+  sups={};supOrder=[];
+  if(su)cols(su).forEach(r=>{sups[r.id]=r;supOrder.push(r.id);});
+  deps={};depOrder=[];
+  if(de)cols(de).forEach(r=>{deps[r.id]=r;if(r.is_sales!==false)depOrder.push(r.id);});
+  noBills=!bi;
+  bills=bi?cols(bi).map(r=>({...r,dk:dstr(r.date_added)}))
+    .sort((a,b)=>(b.dk||"").localeCompare(a.dk||"")||b.id-a.id):[];
+}
+
+function reqTotal(r){
+  const own=items.filter(i=>i.Request_ID===r.id);
+  return own.length?own.reduce((s,i)=>s+(i.Total_price||i.Quantity*i.Unit_price||0),0):(r.Total_amount||0);
+}
+const reqDep=r=>r.department_ref||0;
+
+function billStatus(b){
+  if(b.paid)return {cls:"ok",txt:"оплачен"};
+  if(b.ready)return {cls:"wait",txt:b.synced?"у казначея":"к оплате"};
+  return {cls:"draft",txt:"черновик"};
+}
+
+function modalHtml(){
+  if(!modal)return"";
+  const todayK=dayKey(new Date());
+  if(modal==="bill"){
+    const linkedReq=fv.req?reqs.find(r=>r.id===+fv.req):null;
+    return `<div class="mback" data-close><div class="modal">
+      <h3>${fv.id?"Правка счёта":"Новый счёт на оплату"}<button class="x" data-close>×</button></h3>
+      <div class="form">
+        <label>Дата счёта<input type="date" id="f-date" value="${fv.date||todayK}"></label>
+        <label>Точка<select id="f-dep">${depOrder.map(id=>`<option value="${id}"${+fv.dep===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select></label>
+        <label>Поставщик<select id="f-sup"><option value="0">— выбрать —</option>
+          ${supOrder.map(id=>`<option value="${id}"${+fv.sup===id?" selected":""}>${esc(supName(id))}</option>`).join("")}</select></label>
+        <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${fv.amt||""}" placeholder="0"></label>
+        <label class="widef">Заявка<select id="f-req"><option value="0">— без заявки —</option>
+          ${reqs.map(r=>`<option value="${r.id}"${+fv.req===r.id?" selected":""}>${esc(String(r.PR_Number||("заявка "+r.id)))} · ${esc(depName(reqDep(r)))} · ${fmt(reqTotal(r))} ₸</option>`).join("")}</select></label>
+        <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note||"")}" placeholder="за что"></label>
+        ${linkedReq?`<div class="hint">Заявка на ${fmt(reqTotal(linkedReq))} ₸, статус: ${esc(linkedReq.Status||"—")}</div>`:""}
+        <div class="hint">Файл счёта прикрепите в таблице Bills (колонка invoice) — вложения через это окно пока не грузятся.</div>
+        <div class="widef">
+          <button class="btn primary" id="f-save">${fv.id?"Сохранить":"Создать"}</button>
+          <button class="btn ghost" id="f-saveready">${fv.id?"Сохранить и отправить":"Создать и отправить"}</button>
+          <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
+      </div></div></div>`;
+  }
+  if(modal==="delbill"){
+    return `<div class="mback" data-close><div class="modal">
+      <h3>Удалить счёт<button class="x" data-close>×</button></h3>
+      <div class="form"><div class="hint widef">${esc(fv.label||"")}</div>
+        <div class="widef"><button class="btn primary" id="f-del">Удалить</button>
+          <button class="btn" data-close>Отмена</button>
+          <span class="msg err">${esc(uiMsg)}</span></div></div></div></div>`;
+  }
+  return "";
+}
+
+function render(){
+  const app=document.getElementById("app");
+  const todayK=dayKey(new Date());
+  const draft=bills.filter(b=>!b.ready&&!b.paid);
+  const sent=bills.filter(b=>b.ready&&!b.paid);
+  const paid=bills.filter(b=>b.paid);
+  const late=reqs.filter(r=>r.ed&&r.ed<todayK&&!r.Is_received&&(r.Status||"")!=="Rejected");
+  const waitDocs=reqs.filter(r=>(r.Status||"")==="Approved"&&!bills.some(b=>b.request===r.id));
+
+  const chip=(on,txt)=>`<span class="chip${on?" alert":""}">${txt}</span>`;
+  const signals=`<div class="signals">
+    ${chip(draft.length>0,`Черновики счетов: ${draft.length||"нет"}`)}
+    ${chip(sent.length>0,`Ждут оплаты: ${sent.length?sent.length+" на "+fmt(sent.reduce((a,b)=>a+(b.amount||0),0))+" ₸":"нет"}`)}
+    ${chip(late.length>0,`Просрочена доставка: ${late.length||"нет"}`)}
+    ${chip(waitDocs.length>0,`Заявки без счёта: ${waitDocs.length||"нет"}`)}
+  </div>`;
+
+  const billRow=b=>{
+    const st=billStatus(b);
+    const req=b.request?reqs.find(r=>r.id===b.request):null;
+    return `<div class="li">
+      <span class="d num">${RU_DD(b.dk)}</span>
+      <span class="t"><b>${esc(b.supplier_name||supName(b.supplier)||"Поставщик")}</b>
+        <div class="sub">${esc(depName(b.department))}${req?", заявка "+esc(String(req.PR_Number||req.id)):""}${b.note?", "+esc(b.note):""}</div></span>
+      <span class="a num">${fmt(b.amount)}</span>
+      <span class="badge ${st.cls}">${st.txt}</span>
+      <span class="acts">${b.paid?"":`
+        ${b.ready?`<button class="btn sm" data-unready="${b.id}">Вернуть</button>`
+                 :`<button class="btn primary sm" data-ready="${b.id}">Отправить</button>`}
+        <button class="btn sm" data-editbill="${b.id}">Правка</button>
+        <button class="del" data-delbill="${b.id}">×</button>`}</span></div>`;};
+
+  const listBills=(arr,empty)=>arr.length?arr.map(billRow).join(""):`<div class="empty-line">${empty}</div>`;
+
+  const reqRow=r=>{
+    const dep=reqDep(r),total=reqTotal(r);
+    const has=bills.filter(b=>b.request===r.id);
+    const paidSum=has.filter(b=>b.paid).reduce((s,b)=>s+(b.amount||0),0);
+    const st=r.Is_received?{cls:"ok",txt:"получено"}
+      :(r.ed&&r.ed<todayK)?{cls:"late",txt:"просрочено"}
+      :{cls:"wait",txt:esc(r.Status||"в работе")};
+    return `<div class="li">
+      <span class="d num">${RU_DD(r.ed)}</span>
+      <span class="t"><b>${esc(String(r.PR_Number||("Заявка "+r.id)))}</b>
+        <div class="sub">${esc(depName(dep))}${r.Requested_by?", "+esc(r.Requested_by):""}${has.length?`, счетов: ${has.length}${paidSum?" (оплачено "+fmt(paidSum)+")":""}`:", счёта нет"}</div></span>
+      <span class="a num">${fmt(total)}</span>
+      <span class="badge ${st.cls}">${st.txt}</span>
+      <span class="acts">${has.length?"":`<button class="btn ghost sm" data-billfor="${r.id}">Выставить счёт</button>`}</span></div>`;};
+
+  const supRow=id=>{
+    const s=sups[id];
+    const bs=bills.filter(b=>b.supplier===id);
+    const sum=bs.reduce((a,b)=>a+(b.amount||0),0);
+    const unpaidSum=bs.filter(b=>!b.paid).reduce((a,b)=>a+(b.amount||0),0);
+    return `<tr><td>${esc(s.Name||"")}<div class="sub">${esc(s.Contact_person||"")}${s.Phone?", "+esc(s.Phone):""}</div></td>
+      <td class="num">${bs.length}</td><td class="num">${fmt(sum)}</td>
+      <td class="num">${unpaidSum?fmt(unpaidSum):"0"}</td></tr>`;};
+
+  let body="";
+  if(noBills){
+    body=`<div class="card"><div class="empty-line">Таблица Bills ещё не создана в этом документе.
+      Запустите setup_purchase_doc.py --run и обновите страницу.</div></div>`;
+  } else if(tab==="bills"){
+    body=`<div class="grid">
+      <div class="card"><h2>Черновики <span class="sub">не отправлены казначею</span><span class="cnt">${draft.length} шт</span></h2>
+        <div class="list">${listBills(draft,"Черновиков нет.")}</div></div>
+      <div class="card"><h2>Ждут оплаты<span class="cnt">${sent.length} шт, ${fmt(sent.reduce((a,b)=>a+(b.amount||0),0))} ₸</span></h2>
+        <div class="list">${listBills(sent,"Счетов на оплате нет.")}</div></div>
+      <div class="card wide"><h2>Оплаченные <span class="sub">последние</span><span class="cnt">${paid.length} шт, ${fmt(paid.reduce((a,b)=>a+(b.amount||0),0))} ₸</span></h2>
+        <div class="list">${listBills(paid.slice(0,30),"Оплаченных счетов пока нет.")}</div></div>
+    </div>`;
+  } else if(tab==="reqs"){
+    const open=reqs.filter(r=>!r.Is_received);
+    const done=reqs.filter(r=>r.Is_received);
+    body=`<div class="grid">
+      <div class="card wide"><h2>В работе <span class="sub">заказано, не получено</span><span class="cnt">${open.length} шт</span></h2>
+        <div class="list">${open.length?open.map(reqRow).join(""):`<div class="empty-line">Открытых заявок нет.</div>`}</div></div>
+      <div class="card wide"><h2>Получено<span class="cnt">${done.length} шт</span></h2>
+        <div class="list">${done.length?done.map(reqRow).join(""):`<div class="empty-line">Пока пусто.</div>`}</div></div>
+    </div>`;
+  } else {
+    body=`<div class="card"><h2>Поставщики<span class="cnt">${supOrder.length} шт</span></h2>
+      <table><tr><th>Поставщик</th><th>Счетов</th><th>Сумма</th><th>Не оплачено</th></tr>
+      ${supOrder.length?supOrder.map(supRow).join(""):`<tr><td colspan="4" class="empty-line">Поставщиков нет.</td></tr>`}</table></div>`;
+  }
+
+  app.innerHTML=`
+    <div class="toolbar">
+      <div class="pills">
+        <button class="pill${tab==="bills"?" on":""}" data-tab="bills">Счета</button>
+        <button class="pill${tab==="reqs"?" on":""}" data-tab="reqs">Заявки</button>
+        <button class="pill${tab==="sups"?" on":""}" data-tab="sups">Поставщики</button>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn primary" id="btn-bill"${noBills?" disabled":""}>+ Счёт на оплату</button>
+    </div>
+    ${signals}
+    ${body}
+    ${modalHtml()}`;
+  wire();
+}
+
+const grab=()=>{const g=id=>document.getElementById(id);
+  return {id:fv.id,date:g("f-date")?.value,dep:g("f-dep")?.value,sup:g("f-sup")?.value,
+          amt:g("f-amt")?.value,req:g("f-req")?.value,note:g("f-note")?.value};};
+
+function wire(){
+ try{
+  document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();});
+  const add=document.getElementById("btn-bill");
+  if(add)add.onclick=()=>{modal="bill";uiMsg="";fv={dep:depOrder[0]};render();};
+  document.querySelectorAll("[data-close]").forEach(el=>el.addEventListener("click",e=>{
+    if(e.target===el||el.tagName==="BUTTON"){modal=null;uiMsg="";render();}}));
+
+  document.querySelectorAll("[data-billfor]").forEach(b=>b.onclick=()=>{
+    const r=reqs.find(x=>x.id===+b.dataset.billfor);
+    modal="bill";uiMsg="";
+    fv={dep:reqDep(r)||depOrder[0],req:r.id,amt:reqTotal(r)||"",
+        sup:items.find(i=>i.Request_ID===r.id&&i.Supplier)?.Supplier||0,
+        note:`по заявке ${r.PR_Number||r.id}`};
+    render();});
+
+  document.querySelectorAll("[data-editbill]").forEach(b=>b.onclick=()=>{
+    const x=bills.find(v=>v.id===+b.dataset.editbill); if(!x)return;
+    modal="bill";uiMsg="";
+    fv={id:x.id,date:x.dk,dep:x.department,sup:x.supplier,amt:x.amount,req:x.request,note:x.note||""};
+    render();});
+
+  document.querySelectorAll("[data-delbill]").forEach(b=>b.onclick=()=>{
+    const x=bills.find(v=>v.id===+b.dataset.delbill); if(!x)return;
+    modal="delbill";uiMsg="";
+    fv={id:x.id,label:`${RU_DD(x.dk)}, ${x.supplier_name||supName(x.supplier)||"поставщик"}, ${fmt(x.amount)} ₸`};
+    render();});
+  const del=document.getElementById("f-del");
+  if(del)del.onclick=async()=>{
+    del.disabled=true;
+    try{ await grist.docApi.applyUserActions([["RemoveRecord","Bills",fv.id]]);
+      modal=null;await loadAll();render();
+    }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}};
+
+  document.querySelectorAll("[data-ready]").forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{ await grist.docApi.applyUserActions([["UpdateRecord","Bills",+b.dataset.ready,{ready:true}]]);
+      await loadAll();render();
+    }catch(e){b.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}});
+  document.querySelectorAll("[data-unready]").forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{ await grist.docApi.applyUserActions([["UpdateRecord","Bills",+b.dataset.unready,{ready:false}]]);
+      await loadAll();render();
+    }catch(e){b.disabled=false;uiMsg="Ошибка: "+(e.message||e);render();}});
+
+  const save=async ready=>{
+    fv=grab();
+    const amt=parseFloat(fv.amt);
+    if(!amt||amt<=0){uiMsg="Ошибка: введите сумму";render();return;}
+    const dk=fv.date||dayKey(new Date());
+    const flds={date_added:epoch(dk),department:+fv.dep,supplier:+fv.sup||0,
+      supplier_name:supName(+fv.sup)||"",request:+fv.req||0,amount:amt,
+      note:(fv.note||"").trim(),created_by:"закупщик"};
+    if(ready)flds.ready=true;
+    try{
+      await grist.docApi.applyUserActions([ fv.id
+        ? ["UpdateRecord","Bills",fv.id,flds]
+        : ["AddRecord","Bills",null,flds] ]);
+      modal=null;uiMsg="";await loadAll();render();
+    }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}};
+  const s1=document.getElementById("f-save"),s2=document.getElementById("f-saveready");
+  if(s1)s1.onclick=()=>save(false);
+  if(s2)s2.onclick=()=>save(true);
+ }catch(e){console.error("wire:",e);}
+}
+
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&modal){modal=null;uiMsg="";render();}});
+
+grist.ready({requiredAccess:"full"});
+grist.onRecords(async()=>{
+  try{await loadAll();}catch(e){console.warn("loadAll:",e);}
+  render();
+});
+</script>
+</body>
+</html>
