@@ -111,11 +111,19 @@ const cols=t=>{const ks=Object.keys(t),n=t.id.length,out=[];
 
 let reqs=[],items=[],sups={},supOrder=[],deps={},depOrder=[],bills=[];
 let tab="bills", modal=null, fv={}, uiMsg="", noBills=false;
+let q="", depFilter=0;   // поиск по спискам и фильтр по точке
 // modalReturn: куда вернуть id только что созданного поставщика, если форма
 // поставщика была открыта «быстрым» способом поверх счёта/позиции заявки
 let prevModal=null, prevFv=null, modalReturn=null, itemKeySeq=1;
 
 const depName=id=>deps[id]?.name||"";
+// поиск идёт по всему, что видно в строке: поставщик, точка, заявка, комментарий
+const hit=(...parts)=>{
+  if(!q)return true;
+  const s=parts.filter(Boolean).join(" ").toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(w=>s.includes(w));
+};
+const passDep=id=>!depFilter||id===depFilter;
 const supName=id=>sups[id]?.Name||"";
 
 async function loadAll(){
@@ -327,9 +335,11 @@ function modalHtml(){
 function render(){
   const app=document.getElementById("app");
   const todayK=dayKey(new Date());
-  const draft=bills.filter(b=>!b.ready&&!b.paid);
-  const sent=bills.filter(b=>b.ready&&!b.paid);
-  const paid=bills.filter(b=>b.paid);
+  const billMatch=b=>passDep(b.department)&&hit(b.supplier_name,supName(b.supplier),
+      depName(b.department),b.note,reqs.find(r=>r.id===b.request)?.PR_Number);
+  const draft=bills.filter(b=>!b.ready&&!b.paid&&billMatch(b));
+  const sent=bills.filter(b=>b.ready&&!b.paid&&billMatch(b));
+  const paid=bills.filter(b=>b.paid&&billMatch(b));
   const late=reqs.filter(r=>r.ed&&r.ed<todayK&&!r.Is_received&&(r.Status||"")!=="Rejected");
   const waitDocs=reqs.filter(r=>(r.Status||"")==="Approved"&&!bills.some(b=>b.request===r.id));
 
@@ -409,8 +419,10 @@ function render(){
         <div class="list">${listBills(paid.slice(0,30),"Оплаченных счетов пока нет.")}</div></div>
     </div>`;
   } else if(tab==="reqs"){
-    const open=reqs.filter(r=>!r.Is_received);
-    const done=reqs.filter(r=>r.Is_received);
+    const reqMatch=r=>passDep(reqDep(r))&&hit(String(r.PR_Number||""),depName(reqDep(r)),
+        r.Requested_by,r.Status,items.filter(i=>i.Request_ID===r.id).map(i=>i.Item_name).join(" "));
+    const open=reqs.filter(r=>!r.Is_received&&reqMatch(r));
+    const done=reqs.filter(r=>r.Is_received&&reqMatch(r));
     body=`<div class="grid">
       <div class="card wide"><h2>В работе <span class="sub">заказано, не получено</span><span class="cnt">${open.length} шт</span></h2>
         <div class="list">${open.length?open.map(reqRow).join(""):`<div class="empty-line">Открытых заявок нет.</div>`}</div></div>
@@ -420,7 +432,8 @@ function render(){
   } else {
     body=`<div class="card"><h2>Поставщики<span class="cnt">${supOrder.length} шт</span></h2>
       <table><tr><th>Поставщик</th><th>Счетов</th><th>Сумма</th><th>Не оплачено</th><th></th></tr>
-      ${supOrder.length?supOrder.map(supRow).join(""):`<tr><td colspan="5" class="empty-line">Поставщиков нет.</td></tr>`}</table></div>`;
+      ${supOrder.filter(id=>hit(sups[id].Name,sups[id].Contact_person,sups[id].Phone)).length
+        ?supOrder.filter(id=>hit(sups[id].Name,sups[id].Contact_person,sups[id].Phone)).map(supRow).join(""):`<tr><td colspan="5" class="empty-line">Поставщиков нет.</td></tr>`}</table></div>`;
   }
 
   app.innerHTML=`
@@ -430,6 +443,10 @@ function render(){
         <button class="pill${tab==="reqs"?" on":""}" data-tab="reqs">Заявки</button>
         <button class="pill${tab==="sups"?" on":""}" data-tab="sups">Поставщики</button>
       </div>
+      <input type="search" id="q" placeholder="Поиск" value="${esc(q)}" style="max-width:190px">
+      <select id="depfilter" title="Точка"><option value="0">Все точки</option>
+        ${depOrder.map(id=>`<option value="${id}"${depFilter===id?" selected":""}>${esc(depName(id))}</option>`).join("")}</select>
+      ${(q||depFilter)?`<button class="btn sm" id="q-reset">Сбросить</button>`:""}
       <span class="spacer"></span>
       <button class="btn primary" id="btn-bill"${noBills?" disabled":""}>+ Счёт на оплату</button>
       <button class="btn primary" id="btn-req">+ Заявка</button>
@@ -464,6 +481,13 @@ const grab=()=>{const g=id=>document.getElementById(id);
 function wire(){
  try{
   document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render();});
+  const qi=document.getElementById("q");
+  if(qi)qi.oninput=()=>{const pos=qi.selectionStart;q=qi.value;render();
+    const q2=document.getElementById("q"); if(q2){q2.focus();q2.setSelectionRange(pos,pos);}};
+  const df=document.getElementById("depfilter");
+  if(df)df.onchange=()=>{depFilter=+df.value;render();};
+  const qr=document.getElementById("q-reset");
+  if(qr)qr.onclick=()=>{q="";depFilter=0;render();};
   const add=document.getElementById("btn-bill");
   if(add)add.onclick=()=>{modal="bill";uiMsg="";fv={dep:depOrder[0]};render();};
   const addReq=document.getElementById("btn-req");

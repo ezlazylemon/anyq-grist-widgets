@@ -679,6 +679,33 @@ function seedBase() {
   ok(dbRows.Purchase_Request_Items.filter(i => i.Request_ID === newReq.id).length === 0, "все позиции удалённой заявки тоже удалены");
   ok(__get("modal") === null, "модалка удаления заявки закрылась");
 
+  // ---- поиск и фильтр по точке ----
+  __set("q", ""); __set("depFilter", 0); __set("modal", null); __set("tab", "bills");
+  await __render();
+  const allBills = (appEl.innerHTML.match(/data-editbill=/g) || []).length;
+  ok(allBills > 0, "счета отображаются без фильтров: " + allBills);
+  const anySup = dbRows.Bills.map(b => b.supplier_name).find(Boolean) || "";
+  if (anySup) {
+    __set("q", anySup.split(" ")[0]);
+    await __render();
+    const found = (appEl.innerHTML.match(/data-editbill=/g) || []).length;
+    ok(found > 0 && found <= allBills, "поиск сузил список счетов: " + found + " из " + allBills);
+  }
+  __set("q", "нетакогопоставщикавообще");
+  await __render();
+  ok(!/data-editbill=/.test(appEl.innerHTML), "поиск без совпадений даёт пустой список");
+  ok(/data-tab="bills"/.test(appEl.innerHTML), "вкладки остаются доступны при пустом поиске");
+  __set("q", ""); __set("depFilter", 999999);
+  await __render();
+  ok(!/data-editbill=/.test(appEl.innerHTML), "фильтр по несуществующей точке ничего не показывает");
+  __set("depFilter", 0); await __render();
+  ok((appEl.innerHTML.match(/data-editbill=/g) || []).length === allBills, "сброс фильтра вернул все счета");
+  __set("q", '<script>alert(1)</scr' + 'ipt>');
+  await __render();
+  ok(!/<script>alert\(1\)/.test(appEl.innerHTML), "поисковый запрос экранируется в разметке");
+  __set("q", "");
+  await __render();
+
   console.log("\n" + (FAILS.length ? "ПРОВАЛ: " + FAILS.length + " проверок не прошли" : "ОК: все проверки прошли"));
   process.exit(FAILS.length ? 1 : 0);
 })().catch(e => { console.error("КРИТИЧЕСКАЯ ОШИБКА СТЕНДА:", e); process.exit(1); });
