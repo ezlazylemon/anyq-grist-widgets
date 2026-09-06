@@ -636,6 +636,24 @@ async function main() {
   h = await render();
   check("после успешной загрузки баннера нет", !h.includes("Не удалось прочитать данные"));
 
+  // ---- 19. расход можно сохранить, даже если файл не загрузился ----
+  resetBackend();
+  await freshLoad([mkRevRow(1, T0, 1, { cash: 1000, total: 1000 })]);
+  h = await render();
+  fireClick(documentStub.getElementById("btn-exp"));
+  h = await render();
+  check("в форме расхода есть поле файла", documentStub.getElementById("f-file") !== null);
+  const fileEl = documentStub.getElementById("f-file");
+  fileEl.files = [{ name: "чек.jpg" }];   // загрузка упадёт: fetch в стенде нет
+  fireInput(documentStub.getElementById("f-amt"), "700");
+  const addBtn = documentStub.getElementById("f-add");
+  fireClick(addBtn);
+  await new Promise(r => setTimeout(r, 30));
+  check("расход записан несмотря на сбой загрузки файла", store.Expenses.id.length === 1);
+  check("сообщение объясняет, что файл не прикрепился",
+    String(G("uiMsg")).includes("Файл не прикрепился"));
+  markupSane(appEl.innerHTML, "расход со сбоем файла");
+
   // ================== итог ==================
   const total = results.length, passed = results.filter(r => r.pass).length, failed = total - passed;
   console.log("\n==============================");

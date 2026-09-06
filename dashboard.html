@@ -353,6 +353,7 @@ function modalHtml(){
         <label>Сумма, ₸<input type="number" id="f-amt" min="1" step="1" value="${fv.amt??""}" placeholder="0"></label>
         <label>Поставщик<input type="text" id="f-sup" value="${esc(fv.sup||"")}" placeholder="необязательно"></label>
         <label class="widef">Комментарий<input type="text" id="f-note" value="${esc(fv.note||"")}" placeholder="за что"></label>
+        <label class="widef">Чек или документ<input type="file" id="f-file" accept="image/*,application/pdf"></label>
         <div class="widef"><button class="btn primary" id="f-add">${fv.id?"Сохранить":"Записать расход"}</button>
           <span class="msg ${uiMsg.startsWith("Ошибка")?"err":"ok"}">${esc(uiMsg)}</span></div>
       </div></div></div>`;
@@ -729,6 +730,17 @@ function render(){
 
 // ВАЖНО: id и служебные поля обязаны переживать пересборку формы,
 // иначе правка записи превращается в создание новой (дубли).
+// Файл прикрепляется через прокси сервиса виджетов: Grist 1.7.18 не выдаёт
+// виджету токен для прямой загрузки, а ключ в браузер класть нельзя.
+async function uploadFile(file, docId){
+  if(/github\.io$/.test(location.hostname))throw new Error("виджет открыт не с сервера AnyQ");
+  const fd=new FormData(); fd.append("upload",file,file.name);
+  const res=await fetch(`/upload?doc=${encodeURIComponent(docId||"")}`,{method:"POST",body:fd});
+  if(!res.ok)throw new Error("сервер ответил "+res.status);
+  const ids=await res.json();
+  return Array.isArray(ids)?ids:[ids];
+}
+
 const grabForm=()=>{const g=id=>document.getElementById(id);
   return {id:fv.id, vals:fv.vals,
           date:g("f-date")?.value,dep:g("f-dep")?.value,cat:g("f-cat")?.value,
@@ -856,10 +868,24 @@ function wire(){
         const flds={date:epoch(dk),department:+fv.dep,category:+fv.cat,amount:amt,
           account:+fv.acc,period:dk.slice(0,7),
           supplier:(fv.sup||"").trim(),note:(fv.note||"").trim()};
+        // файл не должен мешать записи расхода: не загрузился — говорим прямо
+        let fileNote="";
+        const fi=document.getElementById("f-file");
+        const file=fi&&fi.files&&fi.files[0];
+        if(file){
+          try{
+            const docId=(await grist.docApi.getDocName?.())||"";
+            const ids=await uploadFile(file,docId);
+            if(ids&&ids.length)flds.attachment=["L",...ids];
+          }catch(e){ fileNote=" Файл не прикрепился ("+(e.message||e)+")."; }
+        }
         await grist.docApi.applyUserActions([ fv.id
           ? ["UpdateRecord","Expenses",fv.id,flds]
           : ["AddRecord","Expenses",null,{...flds,source:"казначей",created_by:"дашборд"}] ]);
-        modal=null;uiMsg="";await loadAll();render();
+        await loadAll();
+        if(fileNote){uiMsg="Расход сохранён."+fileNote;}
+        else{modal=null;uiMsg="";}
+        render();
       }catch(e){uiMsg="Ошибка: "+(e.message||e);render();}
     };
   }
