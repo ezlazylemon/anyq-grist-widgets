@@ -201,6 +201,7 @@ const DELIV=["glovo","wolt","chocofood","yandex"];
 // нейтрально-серый «хвост» для самых мелких долей
 const CATC=["var(--chart1)","var(--chart2)","var(--chart3)","var(--chart4)","var(--chart5)","var(--chart6)","var(--chart7)","var(--chart8)"];
 const TZ="Asia/Aqtobe";
+const LAG_MS=2*60*60*1000;   // лаг синка: cutoff = время прогона − 2 ч
 const fmt=n=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(n);
 // сумма расхода со знаком «−»: если сумма сама отрицательна (сторно/возврат),
 // fmt() уже отдаёт "-1234" — нельзя приписывать перед ней ещё один минус,
@@ -435,6 +436,19 @@ function render(){
   const prevDays=new Set(prevRows.map(r=>dstr(r.date))).size;
   const lastSync=recs.map(r=>r.last_sync_upper||"").filter(Boolean).sort().pop()||"";
   const syncTime=lastSync?lastSync.slice(11,16):"";
+  // last_sync_upper — это отсечка (время прогона минус лаг 2 ч), поэтому
+  // сам прогон был на 2 часа позже. Если с тех пор прошло больше часа,
+  // данные устарели: обмен с iiko встал, и об этом надо сказать явно.
+  let syncAgeMin=null, syncRunAt="";
+  if(lastSync){
+    const cut=new Date(lastSync);
+    if(!isNaN(cut)){
+      const ranAt=new Date(cut.getTime()+LAG_MS);
+      syncRunAt=new Intl.DateTimeFormat("ru-RU",{timeZone:TZ,hour:"2-digit",minute:"2-digit"}).format(ranAt);
+      syncAgeMin=Math.round((Date.now()-ranAt.getTime())/60000);
+    }
+  }
+  const syncStale=syncAgeMin!==null&&syncAgeMin>60;
   let dHtml=`<span class="d mut">&nbsp;</span>`;
   if(openDay) dHtml=`<span class="d mut">день не закончен${syncTime?", данные до "+syncTime:""}</span>`;
   else if(period!=="all"&&prev.total>0&&prevDays>=len){
@@ -617,7 +631,9 @@ function render(){
     ${chip(debtDays.length>0,`Касса не сдана: ${debtDays.length?fmt(debtSum)+" ₸":"нет"}`,"c-cash")}
     ${chip(unpaid.length>0,`Счета к оплате: ${unpaid.length?unpaid.length+" на "+fmt(unpaid.reduce((a,r)=>a+(r.amount||0),0))+" ₸":"нет"}`,"c-bills")}
     ${chip(zeroPts>0,`Точки без продаж: ${zeroPts||"нет"}`,"c-points")}
-    ${chip(false,`Синк iiko: ${syncTime||"нет данных"}`,"c-chart")}
+    ${chip(syncStale,syncAgeMin===null?"Синк iiko: нет данных"
+      :syncStale?`Обмен с iiko отстал: ${syncRunAt}, ${Math.floor(syncAgeMin/60)} ч назад`
+                :`Обновлено в ${syncRunAt}`,"c-chart")}
   </div>`;
 
   const cardPoints=`<div class="card" id="c-points"><h2>Точки
