@@ -224,7 +224,11 @@ function range(){
   if(period==="7d")return[addDays(t,-6),t];
   if(period==="month")return[t.slice(0,8)+"01",t];
   if(period==="custom"){const f=cFrom||t,to=cTo||t;return f<=to?[f,to]:[to,f];}
-  return["0000-01-01",t];
+  // «Всё»: от первой строки выручки, а не от нулевого года — иначе диапазон
+  // растягивался на сотни тысяч дней и график вешал вкладку
+  let first=t;
+  for(const r of recs){const k=dstr(r.date); if(k&&k<first)first=k;}
+  return[first,t];
 }
 const PERIODS=[["today","Сегодня"],["yest","Вчера"],["7d","7 дней"],["month","Месяц"],["all","Всё"],["custom","Свой период"]];
 
@@ -467,7 +471,7 @@ function render(){
   // график всегда показывает контекст последних дней; выбранный период подсвечен
   const byDay={};
   recs.filter(r=>inSel(depId(r.department))).forEach(r=>{const k=dstr(r.date);byDay[k]=(byDay[k]||0)+(r.total||0);});
-  const span=Math.max(len,14);
+  const span=Math.min(Math.max(len,14),60);   // не больше 60 столбцов
   const dks=[];
   for(let k=addDays(to,-(span-1));k<=to;k=addDays(k,1))dks.push(k);
   const dmax=Math.max(...dks.map(k=>byDay[k]||0),1);
